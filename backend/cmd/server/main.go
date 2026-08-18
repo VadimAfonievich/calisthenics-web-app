@@ -16,6 +16,7 @@ import (
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/lessons"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/users"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/workouts"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -59,6 +60,7 @@ func main() {
 		Auth:      handler.AuthDependencies{BotToken: cfg.TelegramBotToken, JWTSecret: cfg.JWTSecret, Users: users.NewStore(pool)},
 		Lessons:   lessons.NewService(pool),
 		Exercises: exercises.NewService(pool),
+		Workouts:  workouts.NewService(pool),
 		Health: handler.HealthDependencies{
 			Postgres: func(checkContext context.Context) error { return pingPostgres(checkContext, pool) },
 			Redis:    func(checkContext context.Context) error { return pingRedis(checkContext, redisClient) },
