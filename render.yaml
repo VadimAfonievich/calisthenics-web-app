@@ -5,6 +5,7 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     region: frankfurt
+    plan: free
     healthCheckPath: /healthz
     envVars:
       - key: APP_ENV
@@ -48,6 +49,7 @@ services:
   - type: keyvalue
     name: calisthenics-key-value
     region: frankfurt
+    plan: free
     ipAllowList: []
 
 databases:
@@ -55,4 +57,5 @@ databases:
     databaseName: calisthenics
     user: calisthenics
     region: frankfurt
+    plan: free
     ipAllowList: []

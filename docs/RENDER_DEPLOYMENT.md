@@ -1,15 +1,15 @@
 # Render deployment
 
-This guide prepares the accepted MVP release candidate for a manual Render deployment. It does not replace the release acceptance process and does not authorize an automatic deployment.
+This guide prepares the accepted MVP release candidate for a manual Render Free deployment. The current configuration is intended exclusively for testing the MVP on Render Free instances. It does not replace the release acceptance process and does not authorize an automatic deployment.
 
 ## Blueprint architecture
 
 `render.yaml` creates these resources:
 
 - `calisthenics-web`: a React/Vite Render Static Site built with `npm ci && npm run build` and published from `frontend/dist`;
-- `calisthenics-api`: a Docker Render Web Service built from `backend/Dockerfile`, with `/healthz` as its health check;
-- `calisthenics-db`: managed Render Postgres, available to the backend through its private connection string;
-- `calisthenics-key-value`: Render Key Value with no public IP allow list, available through its private connection string.
+- `calisthenics-api`: a Free Docker Render Web Service built from `backend/Dockerfile`, with `/healthz` as its health check;
+- `calisthenics-db`: Free managed Render Postgres, available to the backend through its private connection string;
+- `calisthenics-key-value`: Free Render Key Value with no public IP allow list, available through its private connection string.
 
 The backend, Postgres, and Key Value resources are pinned to `frankfurt`. If another region is required, change all three together before creating the Blueprint. Static sites are served through Render's global CDN and do not have a region setting.
 
@@ -123,7 +123,11 @@ User flow:
 
 ## Operational limitations
 
+- The current Blueprint is for a Free MVP test deployment, not a durable production environment.
+- Free Render Postgres provides 1 GB of storage, expires after 30 days, and has no managed backups. Export any data that must survive before the database expires.
+- The Free backend Web Service can spin down when it receives no traffic. The first request after inactivity can experience a cold start.
+- Free Key Value has no persistence, so its data can be lost on restart. This is acceptable for the MVP because PostgreSQL is the primary persistent datastore and Key Value holds only cache, rate-limit, and other temporary state.
 - Render's service filesystem is ephemeral. The MVP has no user-upload endpoint; lesson and exercise media are stored only as external `video_url` and `image_url` values. Do not add local uploads without object storage.
 - Key Value stores rate-limit state and is rebuildable; PostgreSQL is the system of record.
-- Database backups, retention, restore tests, monitoring, custom domains, and TLS/DNS ownership remain manual operational responsibilities.
-- Render plan availability, one-off job access, sleep behavior, retention, and pricing depend on the selected account and plan; review them in the Dashboard before creation.
+- Database exports, retention, restore tests, monitoring, custom domains, and TLS/DNS ownership remain manual operational responsibilities.
+- One-off job and shell availability can be restricted on Free instances; use the documented migration fallback when those features are unavailable.
