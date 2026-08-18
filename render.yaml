@@ -40,7 +40,7 @@ services:
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
-        value: https://calisthenics-api.onrender.com/api/v1
+        value: https://calisthenics-api-r57c.onrender.com/api/v1
     routes:
       - type: rewrite
         source: /*

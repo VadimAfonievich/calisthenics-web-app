@@ -15,6 +15,12 @@ The backend, Postgres, and Key Value resources are pinned to `frankfurt`. If ano
 
 The Go server binds to `:$PORT`, which is equivalent to `0.0.0.0:$PORT`; Render supplies `PORT` automatically. Do not add a fixed `PORT` value in the Dashboard.
 
+Current Render URLs:
+
+- frontend: `https://calisthenics-web.onrender.com`;
+- backend: `https://calisthenics-api-r57c.onrender.com`;
+- API base: `https://calisthenics-api-r57c.onrender.com/api/v1`.
+
 ## First deployment through the Dashboard
 
 1. Sign in to Render and connect the GitHub account that can access `VadimAfonievich/calisthenics-web-app`.
@@ -29,7 +35,7 @@ The Go server binds to `:$PORT`, which is equivalent to `0.0.0.0:$PORT`; Render 
    - `TELEGRAM_WEBAPP_URL=https://calisthenics-web.onrender.com`;
    - `CORS_ORIGINS=https://calisthenics-web.onrender.com`;
    - `LOG_LEVEL=INFO`.
-6. Confirm the frontend build variable `VITE_API_URL=https://calisthenics-api.onrender.com/api/v1`. Vite reads this at build time, so redeploy the static site after changing it.
+6. Confirm the frontend build variable `VITE_API_URL=https://calisthenics-api-r57c.onrender.com/api/v1`. Vite reads this at build time, so redeploy the static site after changing it.
 7. Do not manually replace `DATABASE_URL` or `REDIS_URL`. The Blueprint injects the private Postgres and Key Value connection strings through Render resource references.
 
 If Render assigns different service hostnames because either requested name is unavailable, update `VITE_API_URL`, `TELEGRAM_WEBAPP_URL`, and `CORS_ORIGINS` to the actual HTTPS URLs, then rebuild the static site and redeploy the backend configuration.
@@ -68,8 +74,8 @@ Render ephemeral shells and one-off jobs require an eligible service plan. If th
 Verify the public endpoints after migrations complete:
 
 ```text
-https://calisthenics-api.onrender.com/healthz
-https://calisthenics-api.onrender.com/openapi.yaml
+https://calisthenics-api-r57c.onrender.com/healthz
+https://calisthenics-api-r57c.onrender.com/openapi.yaml
 https://calisthenics-web.onrender.com
 ```
 
