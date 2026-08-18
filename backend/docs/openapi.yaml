@@ -78,6 +78,26 @@ paths:
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Achievement catalog}
+  /api/v1/admin/lessons:
+    post:
+      summary: Create a lesson (administrator only)
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Created lesson}, '403': {description: Administrator role required}}
+  /api/v1/admin/exercises:
+    post:
+      summary: Create an exercise (administrator only)
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Created exercise}, '403': {description: Administrator role required}}
+  /api/v1/admin/programs:
+    post:
+      summary: Create a program (administrator only)
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Created program}, '403': {description: Administrator role required}}
+  /api/v1/admin/workouts:
+    post:
+      summary: Create a workout (administrator only)
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Created workout}, '403': {description: Administrator role required}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}

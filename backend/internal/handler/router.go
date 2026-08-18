@@ -20,6 +20,7 @@ type Dependencies struct {
 	Auth        AuthDependencies
 	Lessons     LessonStore
 	Exercises   ExerciseStore
+	Admin       AdminStore
 	Workouts    WorkoutStore
 	Progress    ProgressStore
 	Health      HealthDependencies
@@ -52,6 +53,26 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Get("/stats", stats(dependencies.Progress))
 			protected.Get("/history", history(dependencies.Progress))
 			protected.Get("/achievements", achievements(dependencies.Progress))
+			protected.Group(func(adminRoutes chi.Router) {
+				adminRoutes.Use(func(next http.Handler) http.Handler { return requireAdmin(dependencies.Admin, next) })
+				adminRoutes.Post("/admin/lessons", createLesson(dependencies.Admin))
+				adminRoutes.Put("/admin/lessons/{id}", updateLesson(dependencies.Admin))
+				adminRoutes.Delete("/admin/lessons/{id}", deleteLesson(dependencies.Admin))
+				adminRoutes.Post("/admin/lessons/{id}/publish", publishLesson(dependencies.Admin))
+				adminRoutes.Post("/admin/exercises", createExercise(dependencies.Admin))
+				adminRoutes.Put("/admin/exercises/{id}", updateExercise(dependencies.Admin))
+				adminRoutes.Delete("/admin/exercises/{id}", deleteExercise(dependencies.Admin))
+				adminRoutes.Post("/admin/programs", programInput(dependencies.Admin, true))
+				adminRoutes.Put("/admin/programs/{id}", programInput(dependencies.Admin, false))
+				adminRoutes.Delete("/admin/programs/{id}", deleteProgram(dependencies.Admin))
+				adminRoutes.Post("/admin/programs/{id}/publish", publishProgram(dependencies.Admin))
+				adminRoutes.Post("/admin/workouts", workoutInput(dependencies.Admin, true))
+				adminRoutes.Put("/admin/workouts/{id}", workoutInput(dependencies.Admin, false))
+				adminRoutes.Delete("/admin/workouts/{id}", deleteWorkout(dependencies.Admin))
+				adminRoutes.Post("/admin/workouts/{id}/exercises", upsertWorkoutExercise(dependencies.Admin))
+				adminRoutes.Put("/admin/workouts/{id}/exercises/{exerciseID}", upsertWorkoutExercise(dependencies.Admin))
+				adminRoutes.Delete("/admin/workouts/{id}/exercises/{exerciseID}", deleteWorkoutExercise(dependencies.Admin))
+			})
 		})
 	})
 	return router

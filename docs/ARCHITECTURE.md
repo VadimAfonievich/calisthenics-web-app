@@ -168,3 +168,7 @@ The frontend production build and the backend Go 1.24 Docker build passed on 202
 Phase 8 makes the backend the source of truth for XP, configurable levels, timezone-aware workout streaks, aggregate statistics, history, and achievement unlocks. Workout completion updates the session, per-exercise statistics, lifetime totals, profile progression, and newly earned achievements in one PostgreSQL transaction. The existing session status and achievement uniqueness constraints keep repeat completion idempotent.
 
 The authenticated API now exposes `GET /progress`, `GET /stats`, `GET /history`, and `GET /achievements`. The mobile client renders level progress, current and longest streaks, twelve-week activity, workout history, and locked/unlocked achievements, and shows earned XP and unlocks after workout completion.
+
+## Phase 9 delivery record
+
+Phase 9 adds a protected minimal CMS. Admin endpoints require the regular JWT plus a matching row in `admin_users`; all other authenticated users receive `403 ADMIN_REQUIRED`. Administrators can create, update, and delete lessons, exercises, programs, workouts, and workout exercises, and publish or unpublish lessons and programs. The client includes a compact JSON-based CMS console at `/admin` for creating the four primary content types.

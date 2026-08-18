@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/admin"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/config"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/exercises"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/handler"
@@ -61,6 +62,7 @@ func main() {
 		Auth:      handler.AuthDependencies{BotToken: cfg.TelegramBotToken, JWTSecret: cfg.JWTSecret, Users: users.NewStore(pool)},
 		Lessons:   lessons.NewService(pool),
 		Exercises: exercises.NewService(pool),
+		Admin:     admin.NewService(pool),
 		Workouts:  workouts.NewService(pool),
 		Progress:  progress.NewService(pool),
 		Health: handler.HealthDependencies{
