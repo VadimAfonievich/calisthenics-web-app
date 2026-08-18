@@ -19,6 +19,7 @@ type HealthDependencies struct {
 type Dependencies struct {
 	Auth        AuthDependencies
 	Lessons     LessonStore
+	Exercises   ExerciseStore
 	Health      HealthDependencies
 	Logger      *slog.Logger
 	CORSOrigins []string
@@ -38,6 +39,8 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Get("/lessons", listLessons(dependencies.Lessons))
 			protected.Get("/lessons/{id}", getLesson(dependencies.Lessons))
 			protected.Post("/lessons/{id}/complete", completeLesson(dependencies.Lessons))
+			protected.Get("/exercises", listExercises(dependencies.Exercises))
+			protected.Get("/exercises/{id}", getExercise(dependencies.Exercises))
 		})
 	})
 	return router
