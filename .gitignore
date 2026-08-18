@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+
+backend/bin/
+frontend/node_modules/
+frontend/dist/
+
+coverage/
+.cache/
+*.log

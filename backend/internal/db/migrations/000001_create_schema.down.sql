@@ -1,0 +1,17 @@
+DROP TABLE IF EXISTS admin_users;
+DROP TABLE IF EXISTS user_achievements;
+DROP TABLE IF EXISTS achievements;
+DROP TABLE IF EXISTS user_exercise_stats;
+DROP TABLE IF EXISTS user_progress;
+DROP TABLE IF EXISTS exercise_sets;
+DROP TABLE IF EXISTS workout_sessions;
+DROP TABLE IF EXISTS workout_exercises;
+DROP TABLE IF EXISTS workouts;
+DROP TABLE IF EXISTS programs;
+DROP TABLE IF EXISTS exercises;
+DROP TABLE IF EXISTS user_lesson_progress;
+DROP TABLE IF EXISTS lessons;
+DROP TABLE IF EXISTS lesson_categories;
+DROP TABLE IF EXISTS profiles;
+DROP TABLE IF EXISTS users;
+DROP FUNCTION IF EXISTS set_updated_at();
