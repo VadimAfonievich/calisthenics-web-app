@@ -172,3 +172,11 @@ The authenticated API now exposes `GET /progress`, `GET /stats`, `GET /history`,
 ## Phase 9 delivery record
 
 Phase 9 adds a protected minimal CMS. Admin endpoints require the regular JWT plus a matching row in `admin_users`; all other authenticated users receive `403 ADMIN_REQUIRED`. Administrators can create, update, and delete lessons, exercises, programs, workouts, and workout exercises, and publish or unpublish lessons and programs. The client includes a compact JSON-based CMS console at `/admin` for creating the four primary content types.
+
+## Phase 10 delivery record
+
+Phase 10 adds request hardening around the existing JWT, ownership, database-constraint, and transactional controls. Every HTTP request is restricted to a 64 KiB body and rate-limited to 120 requests per minute per peer IP using Redis; a transient Redis command failure fails open so availability is not reduced. Workout set submissions now require exactly one non-negative result (repetitions or duration), and workout completion requires a duration from 0 to 43,200 seconds. Responses also disable caching and restrict browser device permissions.
+
+## Phase 11 delivery record
+
+Phase 11 verification passed on 2026-08-18: backend unit and handler tests, frontend production build, Docker Compose validation, migrations, and a full container smoke run. The smoke run confirmed healthy PostgreSQL, Redis, backend, and frontend services; `/healthz`, `/openapi.yaml`, and the frontend shell returned HTTP 200, while an unauthenticated protected endpoint correctly returned HTTP 401.

@@ -35,6 +35,9 @@ func TestHealthzReportsReadyDependencies(t *testing.T) {
 	if got := response.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Fatalf("X-Content-Type-Options = %q", got)
 	}
+	if got := response.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
 }
 
 func TestHealthzReportsUnavailablePostgres(t *testing.T) {

@@ -33,6 +33,8 @@ func securityHeaders(next http.Handler) http.Handler {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		writer.Header().Set("Cache-Control", "no-store")
 		next.ServeHTTP(writer, request)
 	})
 }

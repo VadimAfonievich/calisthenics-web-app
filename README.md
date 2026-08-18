@@ -71,6 +71,13 @@ go test ./...
 
 Set-Location ../frontend
 npm run build
+
+# Docker smoke test (starts required services and applies migrations)
+Set-Location ..
+docker compose up -d postgres redis
+docker compose --profile tools run --rm migrate
+docker compose up -d --build backend frontend
+Invoke-WebRequest http://localhost:8080/healthz
 ```
 
 ## Documentation

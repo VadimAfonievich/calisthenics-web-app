@@ -64,7 +64,7 @@ func set(s WorkoutStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, _ := wu(r)
 		var x workouts.SetInput
-		if e := json.NewDecoder(r.Body).Decode(&x); e != nil || x.ExerciseID == "" || x.Number < 1 || (x.Reps == nil && x.Duration == nil) {
+		if e := json.NewDecoder(r.Body).Decode(&x); e != nil || x.ExerciseID == "" || x.Number < 1 || x.Number > 100 || (x.Reps == nil) == (x.Duration == nil) || (x.Reps != nil && *x.Reps < 0) || (x.Duration != nil && *x.Duration < 0) {
 			writeError(w, 400, "INVALID_SET", "A reps or duration result is required")
 			return
 		}
@@ -78,7 +78,11 @@ func set(s WorkoutStore) http.HandlerFunc {
 func complete(s WorkoutStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, _ := wu(r)
-		d, _ := strconv.ParseInt(r.URL.Query().Get("duration_seconds"), 10, 32)
+		d, err := strconv.ParseInt(r.URL.Query().Get("duration_seconds"), 10, 32)
+		if err != nil || d < 0 || d > 12*60*60 {
+			writeError(w, 400, "INVALID_DURATION", "duration_seconds must be between 0 and 43200")
+			return
+		}
 		x, e := s.Complete(r.Context(), u, chi.URLParam(r, "id"), int32(d))
 		if e != nil {
 			writeError(w, wh(e), "WORKOUT_COMPLETION_FAILED", "Could not complete workout")

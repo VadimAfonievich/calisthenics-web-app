@@ -72,6 +72,7 @@ func main() {
 		Logger:      logger,
 		CORSOrigins: cfg.CORSOrigins,
 	})
+	router = middleware.LimitBody(64<<10, middleware.RateLimit(redisClient, 120, time.Minute, router))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
