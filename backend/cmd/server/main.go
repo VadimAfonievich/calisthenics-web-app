@@ -12,6 +12,7 @@ import (
 
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/config"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/handler"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/lessons"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/users"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,7 +55,8 @@ func main() {
 	}
 
 	router := handler.NewRouter(handler.Dependencies{
-		Auth: handler.AuthDependencies{BotToken: cfg.TelegramBotToken, JWTSecret: cfg.JWTSecret, Users: users.NewStore(pool)},
+		Auth:    handler.AuthDependencies{BotToken: cfg.TelegramBotToken, JWTSecret: cfg.JWTSecret, Users: users.NewStore(pool)},
+		Lessons: lessons.NewService(pool),
 		Health: handler.HealthDependencies{
 			Postgres: func(checkContext context.Context) error { return pingPostgres(checkContext, pool) },
 			Redis:    func(checkContext context.Context) error { return pingRedis(checkContext, redisClient) },

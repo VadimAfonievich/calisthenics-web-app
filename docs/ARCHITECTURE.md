@@ -156,3 +156,9 @@ The Telegram bot token remains intentionally unset in `.env.example`; without it
 Phase 4 establishes the React Mini App client flow: Telegram WebApp initialization, application of Telegram theme values and safe-area support, a Telegram authentication bootstrap, Zustand session state, a typed API client with the common error envelope, and TanStack Query as the server-state provider. The mobile-first application shell includes the specified MVP routes, loading/error/demo states, and bottom navigation.
 
 When opened outside Telegram, the app intentionally enters a clearly labeled demo mode rather than attempting to create a trusted user identity. `npm run build` passed on 2026-08-18.
+
+## Phase 5 delivery record
+
+Phase 5 delivers the authenticated lesson catalog, lesson detail, and idempotent completion flow. `POST /api/v1/lessons/{id}/complete` writes progress and awards the fixed lesson reward of 20 XP only on the first completion, within one PostgreSQL transaction. The React client reads the catalog through TanStack Query, renders the lesson content, and invalidates the list after completion.
+
+The frontend production build and the backend Go 1.24 Docker build passed on 2026-08-18.

@@ -34,6 +34,26 @@ paths:
       responses:
         '200': {description: Current user}
         '401': {description: Missing or invalid access token}
+  /api/v1/lessons:
+    get:
+      summary: List published lessons with the current user's progress
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Published lessons}
+  /api/v1/lessons/{id}:
+    get:
+      summary: Get a published lesson with current-user progress
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Lesson}
+        '404': {description: Lesson not found}
+  /api/v1/lessons/{id}/complete:
+    post:
+      summary: Complete a lesson and award XP once
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Completion result}
+        '404': {description: Lesson not found}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}

@@ -18,6 +18,7 @@ type HealthDependencies struct {
 
 type Dependencies struct {
 	Auth        AuthDependencies
+	Lessons     LessonStore
 	Health      HealthDependencies
 	Logger      *slog.Logger
 	CORSOrigins []string
@@ -32,7 +33,12 @@ func NewRouter(dependencies Dependencies) http.Handler {
 	router.Get("/openapi.yaml", openAPIHandler)
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Post("/auth/telegram", telegramAuthHandler(dependencies.Auth))
-		api.With(func(next http.Handler) http.Handler { return middleware.RequireAuth(dependencies.Auth.JWTSecret, next) }).Get("/me", meHandler(dependencies.Auth))
+		api.With(func(next http.Handler) http.Handler { return middleware.RequireAuth(dependencies.Auth.JWTSecret, next) }).Group(func(protected chi.Router) {
+			protected.Get("/me", meHandler(dependencies.Auth))
+			protected.Get("/lessons", listLessons(dependencies.Lessons))
+			protected.Get("/lessons/{id}", getLesson(dependencies.Lessons))
+			protected.Post("/lessons/{id}/complete", completeLesson(dependencies.Lessons))
+		})
 	})
 	return router
 }
