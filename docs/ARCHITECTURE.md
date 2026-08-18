@@ -180,3 +180,7 @@ Phase 10 adds request hardening around the existing JWT, ownership, database-con
 ## Phase 11 delivery record
 
 Phase 11 verification passed on 2026-08-18: backend unit and handler tests, frontend production build, Docker Compose validation, migrations, and a full container smoke run. The smoke run confirmed healthy PostgreSQL, Redis, backend, and frontend services; `/healthz`, `/openapi.yaml`, and the frontend shell returned HTTP 200, while an unauthenticated protected endpoint correctly returned HTTP 401.
+
+## Phase 12 delivery record
+
+Phase 12 adds a production Compose profile, protected environment template, deployment runbook, PostgreSQL backup/restore procedure, monitoring guidance, and Telegram Mini App configuration guide. Production infrastructure has no published PostgreSQL or Redis ports; application ports are loopback-only for an HTTPS reverse proxy. Database migrations run as a one-off pre-deployment step and health checks cover PostgreSQL, Redis, and the backend.

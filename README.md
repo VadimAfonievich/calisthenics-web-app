@@ -53,6 +53,20 @@ npm install
 npm run dev
 ```
 
+## Production
+
+Use the separate production Compose file and a protected environment file; it keeps PostgreSQL and Redis off public ports and binds app services to loopback for an HTTPS reverse proxy.
+
+```sh
+cp .env.production.example .env.production
+# Edit all placeholder values, then:
+docker compose --env-file .env.production -f docker-compose.production.yml up -d postgres redis
+docker compose --env-file .env.production -f docker-compose.production.yml --profile tools run --rm migrate
+docker compose --env-file .env.production -f docker-compose.production.yml up -d --build backend frontend
+```
+
+See [deployment](docs/DEPLOYMENT.md), [backups](docs/BACKUPS.md), and [Telegram setup](docs/TELEGRAM.md) before exposing the app publicly.
+
 ## Database, seed data, and Telegram
 
 The backend never creates schema implicitly. Apply the schema and demo seed data through the migration tool profile:
@@ -84,5 +98,8 @@ Invoke-WebRequest http://localhost:8080/healthz
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Database design and workflow](docs/DATABASE.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Backup and restore](docs/BACKUPS.md)
+- [Telegram setup](docs/TELEGRAM.md)
 - [OpenAPI foundation](backend/docs/openapi.yaml)
 - [Master specification](CALISTHENICS_TELEGRAM_MINI_APP_MASTER_SPEC.md)
