@@ -21,6 +21,7 @@ type Dependencies struct {
 	Lessons     LessonStore
 	Exercises   ExerciseStore
 	Workouts    WorkoutStore
+	Progress    ProgressStore
 	Health      HealthDependencies
 	Logger      *slog.Logger
 	CORSOrigins []string
@@ -47,6 +48,10 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Post("/workouts/{id}/start", start(dependencies.Workouts))
 			protected.Post("/workout-sessions/{id}/sets", set(dependencies.Workouts))
 			protected.Post("/workout-sessions/{id}/complete", complete(dependencies.Workouts))
+			protected.Get("/progress", summary(dependencies.Progress))
+			protected.Get("/stats", stats(dependencies.Progress))
+			protected.Get("/history", history(dependencies.Progress))
+			protected.Get("/achievements", achievements(dependencies.Progress))
 		})
 	})
 	return router

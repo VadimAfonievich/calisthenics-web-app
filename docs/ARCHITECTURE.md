@@ -162,3 +162,9 @@ When opened outside Telegram, the app intentionally enters a clearly labeled dem
 Phase 5 delivers the authenticated lesson catalog, lesson detail, and idempotent completion flow. `POST /api/v1/lessons/{id}/complete` writes progress and awards the fixed lesson reward of 20 XP only on the first completion, within one PostgreSQL transaction. The React client reads the catalog through TanStack Query, renders the lesson content, and invalidates the list after completion.
 
 The frontend production build and the backend Go 1.24 Docker build passed on 2026-08-18.
+
+## Phase 8 delivery record
+
+Phase 8 makes the backend the source of truth for XP, configurable levels, timezone-aware workout streaks, aggregate statistics, history, and achievement unlocks. Workout completion updates the session, per-exercise statistics, lifetime totals, profile progression, and newly earned achievements in one PostgreSQL transaction. The existing session status and achievement uniqueness constraints keep repeat completion idempotent.
+
+The authenticated API now exposes `GET /progress`, `GET /stats`, `GET /history`, and `GET /achievements`. The mobile client renders level progress, current and longest streaks, twelve-week activity, workout history, and locked/unlocked achievements, and shows earned XP and unlocks after workout completion.

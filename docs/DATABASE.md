@@ -64,7 +64,7 @@ Failure rolls back the complete operation. The unique constraints and a status-g
 
 ## Migrations and seed workflow
 
-`000001_create_schema` creates the schema. `000002_seed_demo_content` adds deterministic Russian demo content: 4 lesson categories, 10 lessons, 10 exercises, 2 programs, 5 workouts, 16 workout-exercise assignments, and 10 achievements. The seed uses fixed UUIDs only for reference content; production rows use generated UUIDs.
+`000001_create_schema` creates the schema. `000002_seed_demo_content` adds deterministic Russian demo content: 4 lesson categories, 10 lessons, 10 exercises, 2 programs, 5 workouts, 16 workout-exercise assignments, and 10 achievements. `000003_progress_gamification` adds the configurable level thresholds and the last local workout date used by streak calculation. The seed uses fixed UUIDs only for reference content; production rows use generated UUIDs.
 
 Run migrations against the Docker PostgreSQL service:
 

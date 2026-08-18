@@ -54,6 +54,30 @@ paths:
       responses:
         '200': {description: Completion result}
         '404': {description: Lesson not found}
+  /api/v1/progress:
+    get:
+      summary: Get XP, level, streak, and lifetime totals
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Current progress summary}
+  /api/v1/stats:
+    get:
+      summary: Get lifetime and weekly workout statistics
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Workout statistics}
+  /api/v1/history:
+    get:
+      summary: Get completed workout history
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Completed workout history}
+  /api/v1/achievements:
+    get:
+      summary: Get the achievement catalog and unlock state
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Achievement catalog}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}

@@ -15,6 +15,7 @@ import (
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/handler"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/lessons"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/progress"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/users"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/workouts"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,6 +62,7 @@ func main() {
 		Lessons:   lessons.NewService(pool),
 		Exercises: exercises.NewService(pool),
 		Workouts:  workouts.NewService(pool),
+		Progress:  progress.NewService(pool),
 		Health: handler.HealthDependencies{
 			Postgres: func(checkContext context.Context) error { return pingPostgres(checkContext, pool) },
 			Redis:    func(checkContext context.Context) error { return pingRedis(checkContext, redisClient) },
