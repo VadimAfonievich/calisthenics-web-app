@@ -14,10 +14,16 @@ const LessonCompletionXP = 20
 var ErrNotFound = errors.New("lesson not found")
 
 type Lesson struct {
-	ID, CategoryID, CategoryName, Title, ShortDescription, Content, Difficulty string
-	DurationMinutes                                                            int32
-	Completed                                                                  bool
-	ProgressPercent                                                            int16
+	ID               string `json:"id"`
+	CategoryID       string `json:"category_id"`
+	CategoryName     string `json:"category_name"`
+	Title            string `json:"title"`
+	ShortDescription string `json:"short_description"`
+	Content          string `json:"content"`
+	Difficulty       string `json:"difficulty"`
+	DurationMinutes  int32  `json:"duration_minutes"`
+	Completed        bool   `json:"completed"`
+	ProgressPercent  int16  `json:"progress_percent"`
 }
 type Completion struct {
 	XPearned         int32 `json:"xp_earned"`

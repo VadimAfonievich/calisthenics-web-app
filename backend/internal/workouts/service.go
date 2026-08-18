@@ -18,23 +18,28 @@ var (
 )
 
 type Exercise struct {
-	ID, Name       string
-	Sets           int16
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Sets           int16  `json:"sets"`
 	TargetReps     *int16 `json:"target_reps,omitempty"`
 	TargetDuration *int32 `json:"target_duration_seconds,omitempty"`
 	Rest           int32  `json:"rest_seconds"`
 }
 type Workout struct {
-	ID, Title, Description string
-	Minutes                int32      `json:"estimated_minutes"`
-	Exercises              []Exercise `json:"exercises"`
+	ID          string     `json:"id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Minutes     int32      `json:"estimated_minutes"`
+	Exercises   []Exercise `json:"exercises"`
 }
 type Session struct {
-	ID, WorkoutID, Status string
-	Duration              int32    `json:"duration_seconds"`
-	XP                    int32    `json:"xp_earned"`
-	CurrentStreak         int32    `json:"current_streak"`
-	UnlockedAchievements  []string `json:"unlocked_achievements"`
+	ID                   string   `json:"id"`
+	WorkoutID            string   `json:"workout_id"`
+	Status               string   `json:"status"`
+	Duration             int32    `json:"duration_seconds"`
+	XP                   int32    `json:"xp_earned"`
+	CurrentStreak        int32    `json:"current_streak"`
+	UnlockedAchievements []string `json:"unlocked_achievements"`
 }
 type SetInput struct {
 	ExerciseID string `json:"exercise_id"`

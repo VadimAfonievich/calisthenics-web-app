@@ -33,12 +33,17 @@ func listLessons(store LessonStore) http.HandlerFunc {
 }
 func getLesson(store LessonStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		lessonID := chi.URLParam(r, "id")
+		if !validUUID(lessonID) {
+			writeError(w, 400, "INVALID_INPUT", "Lesson id must be a valid UUID")
+			return
+		}
 		id, ok := lessonUserID(r)
 		if !ok {
 			writeError(w, 401, "UNAUTHORIZED", "Authentication is required")
 			return
 		}
-		item, err := store.Get(r.Context(), id, chi.URLParam(r, "id"))
+		item, err := store.Get(r.Context(), id, lessonID)
 		if errors.Is(err, lessons.ErrNotFound) {
 			writeError(w, 404, "LESSON_NOT_FOUND", "Lesson not found")
 			return
@@ -52,12 +57,17 @@ func getLesson(store LessonStore) http.HandlerFunc {
 }
 func completeLesson(store LessonStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		lessonID := chi.URLParam(r, "id")
+		if !validUUID(lessonID) {
+			writeError(w, 400, "INVALID_INPUT", "Lesson id must be a valid UUID")
+			return
+		}
 		id, ok := lessonUserID(r)
 		if !ok {
 			writeError(w, 401, "UNAUTHORIZED", "Authentication is required")
 			return
 		}
-		result, err := store.Complete(r.Context(), id, chi.URLParam(r, "id"))
+		result, err := store.Complete(r.Context(), id, lessonID)
 		if errors.Is(err, lessons.ErrNotFound) {
 			writeError(w, 404, "LESSON_NOT_FOUND", "Lesson not found")
 			return
