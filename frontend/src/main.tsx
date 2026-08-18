@@ -10,8 +10,14 @@ import './styles.css'
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } })
 
 function Bootstrap() {
-  const bootstrap = useSessionStore((state) => state.bootstrap)
-  useEffect(() => { const telegram = initializeTelegram(); void bootstrap(telegram.initData) }, [bootstrap])
+  const { bootstrap, failInitialization, setTelegramDiagnostics } = useSessionStore()
+  useEffect(() => {
+    const start = async () => {
+      try { const telegram = initializeTelegram(); setTelegramDiagnostics(telegram.diagnostics); await bootstrap(telegram.initData) }
+      catch (error) { failInitialization(error) }
+    }
+    void start()
+  }, [bootstrap, failInitialization, setTelegramDiagnostics])
   return <AppRouter />
 }
 
