@@ -1,0 +1,1 @@
+export function PlaceholderPage({ title, text }: { title: string; text: string }) { return <div className="empty-state"><div className="empty-icon">✦</div><h2>{title}</h2><p>{text}</p><span>Функция в разработке</span></div> }

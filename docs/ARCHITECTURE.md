@@ -150,3 +150,9 @@ The initial container build exposed an unreliable connection from Docker to `pro
 Phase 3 adds `POST /api/v1/auth/telegram` and the protected `GET /api/v1/me` endpoint. The backend validates the Telegram WebApp `initData` signature server-side, rejects stale payloads, provisions a user, profile, and progress row transactionally, and issues a 24-hour HS256 JWT. Protected routes only obtain the user ID from a verified Bearer token.
 
 The Telegram bot token remains intentionally unset in `.env.example`; without it, the authentication endpoint safely reports `AUTH_UNAVAILABLE` rather than accepting an unverified client identity. Unit tests cover valid, expired, and tampered Telegram initData, JWT verification, and the protected `/me` route.
+
+## Phase 4 delivery record
+
+Phase 4 establishes the React Mini App client flow: Telegram WebApp initialization, application of Telegram theme values and safe-area support, a Telegram authentication bootstrap, Zustand session state, a typed API client with the common error envelope, and TanStack Query as the server-state provider. The mobile-first application shell includes the specified MVP routes, loading/error/demo states, and bottom navigation.
+
+When opened outside Telegram, the app intentionally enters a clearly labeled demo mode rather than attempting to create a trusted user identity. `npm run build` passed on 2026-08-18.
