@@ -20,6 +20,7 @@ type Dependencies struct {
 	Auth        AuthDependencies
 	Lessons     LessonStore
 	Exercises   ExerciseStore
+	Programs    ProgramStore
 	Admin       AdminStore
 	Workouts    WorkoutStore
 	Progress    ProgressStore
@@ -44,6 +45,8 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Post("/lessons/{id}/complete", completeLesson(dependencies.Lessons))
 			protected.Get("/exercises", listExercises(dependencies.Exercises))
 			protected.Get("/exercises/{id}", getExercise(dependencies.Exercises))
+			protected.Get("/programs", listPrograms(dependencies.Programs))
+			protected.Get("/programs/{id}", getProgram(dependencies.Programs))
 			protected.Get("/workouts/today", today(dependencies.Workouts))
 			protected.Get("/workouts/{id}", getWorkout(dependencies.Workouts))
 			protected.Post("/workouts/{id}/start", start(dependencies.Workouts))

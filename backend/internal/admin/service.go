@@ -12,29 +12,52 @@ import (
 var ErrNotFound = errors.New("content not found")
 
 type Lesson struct {
-	CategoryID, Title, Slug, ShortDescription, Content, Difficulty string
-	DurationMinutes, SortOrder                                     int
-	Published                                                      bool
+	CategoryID       string `json:"category_id"`
+	Title            string `json:"title"`
+	Slug             string `json:"slug"`
+	ShortDescription string `json:"short_description"`
+	Content          string `json:"content"`
+	Difficulty       string `json:"difficulty"`
+	DurationMinutes  int    `json:"duration_minutes"`
+	SortOrder        int    `json:"sort_order"`
+	Published        bool   `json:"published"`
 }
 type Exercise struct {
-	Name, Slug, Description, Instructions, CommonMistakes, Difficulty string
-	MuscleGroups, Equipment                                           []string
-	VideoURL, ImageURL                                                *string
+	Name           string   `json:"name"`
+	Slug           string   `json:"slug"`
+	Description    string   `json:"description"`
+	Instructions   string   `json:"instructions"`
+	CommonMistakes string   `json:"common_mistakes"`
+	Difficulty     string   `json:"difficulty"`
+	MuscleGroups   []string `json:"muscle_groups"`
+	Equipment      []string `json:"equipment"`
+	VideoURL       *string  `json:"video_url"`
+	ImageURL       *string  `json:"image_url"`
 }
 type Program struct {
-	Name, Slug, Description, Difficulty string
-	DurationWeeks                       int
-	Published                           bool
+	Name          string `json:"name"`
+	Slug          string `json:"slug"`
+	Description   string `json:"description"`
+	Difficulty    string `json:"difficulty"`
+	DurationWeeks int    `json:"duration_weeks"`
+	Published     bool   `json:"published"`
 }
 type Workout struct {
-	ProgramID, Title, Description          string
-	DayNumber, EstimatedMinutes, SortOrder int
+	ProgramID        string `json:"program_id"`
+	Title            string `json:"title"`
+	Description      string `json:"description"`
+	DayNumber        int    `json:"day_number"`
+	EstimatedMinutes int    `json:"estimated_minutes"`
+	SortOrder        int    `json:"sort_order"`
 }
 type WorkoutExercise struct {
-	ExerciseID                        string
-	Sets, RestSeconds, SortOrder      int
-	TargetReps, TargetDurationSeconds *int
-	Notes                             *string
+	ExerciseID            string  `json:"exercise_id"`
+	Sets                  int     `json:"sets"`
+	RestSeconds           int     `json:"rest_seconds"`
+	SortOrder             int     `json:"sort_order"`
+	TargetReps            *int    `json:"target_reps"`
+	TargetDurationSeconds *int    `json:"target_duration_seconds"`
+	Notes                 *string `json:"notes"`
 }
 type Service struct{ pool *pgxpool.Pool }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/handler"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/lessons"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/programs"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/progress"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/users"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/workouts"
@@ -62,6 +63,7 @@ func main() {
 		Auth:      handler.AuthDependencies{BotToken: cfg.TelegramBotToken, JWTSecret: cfg.JWTSecret, Users: users.NewStore(pool)},
 		Lessons:   lessons.NewService(pool),
 		Exercises: exercises.NewService(pool),
+		Programs:  programs.NewService(pool),
 		Admin:     admin.NewService(pool),
 		Workouts:  workouts.NewService(pool),
 		Progress:  progress.NewService(pool),
