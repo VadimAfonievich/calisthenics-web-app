@@ -12,7 +12,7 @@ const user = { id: 'user-id', first_name: 'Test', display_name: 'Test', level: 1
 beforeEach(() => {
   mocks.authenticateTelegram.mockReset()
   sessionStorage.clear()
-  useSessionStore.setState({ status: 'loading', accessToken: undefined, user: undefined, error: undefined, diagnostics: { sdkLoaded: false, webAppDetected: false, initDataPresent: false, initDataLength: 0, apiBaseConfigured: true, authStarted: false, authCompleted: false } })
+  useSessionStore.setState({ status: 'loading', accessToken: undefined, user: undefined, error: undefined, diagnostics: { sdkLoaded: false, webAppDetected: false, initDataPresent: false, initDataLength: 0, apiBaseConfigured: true, apiBaseURL: 'https://example.com/api/v1', authRequestURL: 'https://example.com/api/v1/auth/telegram', authRequestMethod: 'POST', authStarted: false, authCompleted: false, healthProbeURL: 'https://example.com/healthz', healthProbeStarted: false, healthProbeCompleted: false } })
 })
 
 describe('session bootstrap', () => {
@@ -33,6 +33,12 @@ describe('session bootstrap', () => {
     mocks.authenticateTelegram.mockRejectedValue(new APIError('INVALID_TELEGRAM_INIT_DATA', 'Invalid data', 401))
     await useSessionStore.getState().bootstrap('invalid-init-data')
     expect(useSessionStore.getState()).toMatchObject({ status: 'error', diagnostics: { authStarted: true, authCompleted: true, authHTTPStatus: 401 } })
+  })
+
+  it('classifies an auth fetch network failure', async () => {
+    mocks.authenticateTelegram.mockRejectedValue(new TypeError('Failed to fetch'))
+    await useSessionStore.getState().bootstrap('original-init-data')
+    expect(useSessionStore.getState()).toMatchObject({ status: 'error', diagnostics: { authStarted: true, authCompleted: true, authHTTPStatus: undefined, authError: 'TypeError: network failure (Failed to fetch)' } })
   })
 
   it('ends loading in error state after an initialization exception', () => {
