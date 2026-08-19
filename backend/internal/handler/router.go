@@ -24,6 +24,7 @@ type Dependencies struct {
 	Admin       AdminStore
 	Workouts    WorkoutStore
 	Progress    ProgressStore
+	Skills      SkillsStore
 	Health      HealthDependencies
 	Logger      *slog.Logger
 	CORSOrigins []string
@@ -58,6 +59,11 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Get("/stats", stats(dependencies.Progress))
 			protected.Get("/history", history(dependencies.Progress))
 			protected.Get("/achievements", achievements(dependencies.Progress))
+			protected.Get("/skills", listSkills(dependencies.Skills))
+			protected.Get("/skills/map", skillMap(dependencies.Skills))
+			protected.Get("/skills/{id}", getSkill(dependencies.Skills))
+			protected.Post("/skills/{id}/levels/{level}/complete", completeSkillLevel(dependencies.Skills))
+			protected.Post("/skills/{id}/master", masterSkill(dependencies.Skills))
 			protected.Group(func(adminRoutes chi.Router) {
 				adminRoutes.Use(func(next http.Handler) http.Handler { return requireAdmin(dependencies.Admin, next) })
 				adminRoutes.Post("/admin/lessons", createLesson(dependencies.Admin))

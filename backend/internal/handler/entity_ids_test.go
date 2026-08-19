@@ -37,7 +37,7 @@ type workoutIDStoreStub struct {
 }
 
 func (s *workoutIDStoreStub) List(context.Context, string) ([]workouts.CatalogItem, error) {
-	return []workouts.CatalogItem{{ID: validEntityID, Title: "Workout", Minutes: 30, Difficulty: "beginner", ExerciseCount: 8, ProgramID: validEntityID, ProgramName: "Program"}}, nil
+	return []workouts.CatalogItem{{ID: validEntityID, Title: "Workout", Minutes: 30, Difficulty: "beginner", ExerciseCount: 8, ProgramID: validEntityID, ProgramName: "Program", Category: "SKILL"}}, nil
 }
 func (s *workoutIDStoreStub) Today(context.Context) (workouts.Workout, error) {
 	return workouts.Workout{ID: validEntityID, Title: "Workout", Minutes: 30, Exercises: []workouts.Exercise{{ID: validEntityID, Name: "Exercise", Sets: 1}}}, nil
@@ -113,7 +113,7 @@ func TestWorkoutCatalogContract(t *testing.T) {
 	w := httptest.NewRecorder()
 	listWorkouts(&workoutIDStoreStub{}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/workouts", nil))
 	body := w.Body.String()
-	for _, field := range []string{`"id"`, `"estimated_minutes":30`, `"difficulty":"beginner"`, `"exercise_count":8`, `"program_id"`, `"program_name":"Program"`} {
+	for _, field := range []string{`"id"`, `"estimated_minutes":30`, `"difficulty":"beginner"`, `"exercise_count":8`, `"program_id"`, `"program_name":"Program"`, `"category":"SKILL"`} {
 		if !strings.Contains(body, field) {
 			t.Fatalf("missing %s in %s", field, body)
 		}

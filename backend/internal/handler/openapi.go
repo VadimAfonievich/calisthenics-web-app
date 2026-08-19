@@ -127,6 +127,32 @@ paths:
         '200': {description: Completion summary}
         '400': {description: Invalid duration or UUID}
         '403': {description: Session belongs to another user}
+  /api/v1/skills:
+    get:
+      summary: List skill progressions with current-user state
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Skills with status and progress}}
+  /api/v1/skills/map:
+    get:
+      summary: Get skill graph nodes and prerequisite edges
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Skill graph}}
+  /api/v1/skills/{id}:
+    get:
+      summary: Get skill levels, criteria, linked workouts, and user state
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Skill detail}, '400': {description: Invalid UUID}, '404': {description: Skill not found}}
+  /api/v1/skills/{id}/levels/{level}/complete:
+    post:
+      summary: Validate and complete a skill level, unlocking the next level
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Level completed}, '403': {description: Prerequisite locked}, '409': {description: Criterion not met}}
+  /api/v1/skills/{id}/master:
+    post:
+      summary: Idempotently master a skill and award backend XP and achievement
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Mastery result}, '409': {description: Final criterion or levels incomplete}}
   /api/v1/progress:
     get:
       summary: Get XP, level, streak, and lifetime totals

@@ -3,7 +3,7 @@ import { requireEntityID } from './entityIds'
 
 export type WorkoutExercise={id:string;name:string;sets:number;target_reps?:number;target_duration_seconds?:number;rest_seconds:number}
 export type Workout={id:string;title:string;description:string;estimated_minutes:number;difficulty:string;program_id:string;program_name:string;exercises:WorkoutExercise[]}
-export type WorkoutCatalogItem={id:string;title:string;description:string;estimated_minutes:number;difficulty:string;exercise_count:number;program_id:string;program_name:string;status?:string;active_session_id?:string}
+export type WorkoutCatalogItem={id:string;title:string;description:string;estimated_minutes:number;difficulty:string;exercise_count:number;program_id:string;program_name:string;category:string;status?:string;active_session_id?:string}
 export type CompletedSet={exercise_id:string;set_number:number;reps?:number;duration_seconds?:number;completed:boolean}
 export type WorkoutSession={id:string;workout_id:string;status:string;duration_seconds:number;xp_earned:number;current_streak:number;unlocked_achievements:string[];started_at:string}
 export type ActiveWorkout={session:WorkoutSession;workout:Workout;completed_sets:CompletedSet[]}
