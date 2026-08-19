@@ -26,6 +26,7 @@ type Dependencies struct {
 	Progress    ProgressStore
 	Skills      SkillsStore
 	Calendar    CalendarStore
+	Coach       CoachStore
 	Health      HealthDependencies
 	Logger      *slog.Logger
 	CORSOrigins []string
@@ -76,6 +77,19 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Put("/planned-workouts/{id}", plannedByID(dependencies.Calendar))
 			protected.Delete("/planned-workouts/{id}", plannedByID(dependencies.Calendar))
 			protected.Post("/planned-workouts/{id}/skip", skipPlanned(dependencies.Calendar))
+			protected.With(func(next http.Handler) http.Handler { return requireCoach(dependencies.Coach, next) }).Route("/coach", func(coach chi.Router) {
+				coach.Get("/me", coachMe(dependencies.Coach))
+				coach.Get("/dashboard", coachDashboard(dependencies.Coach))
+				coach.Get("/analytics", coachAnalytics(dependencies.Coach))
+				coach.Get("/media", coachMedia(dependencies.Coach))
+				coach.Post("/media", coachMedia(dependencies.Coach))
+				coach.Post("/media/upload", coachUploadUnavailable)
+				coach.Delete("/media/{id}", coachMediaDelete(dependencies.Coach))
+				coach.Get("/{kind}", coachContent(dependencies.Coach))
+				coach.Post("/{kind}", coachContent(dependencies.Coach))
+				coach.Put("/{kind}/{id}", coachContentID(dependencies.Coach))
+				coach.Post("/{kind}/{id}/{action}", coachAction(dependencies.Coach))
+			})
 			protected.Group(func(adminRoutes chi.Router) {
 				adminRoutes.Use(func(next http.Handler) http.Handler { return requireAdmin(dependencies.Admin, next) })
 				adminRoutes.Post("/admin/lessons", createLesson(dependencies.Admin))

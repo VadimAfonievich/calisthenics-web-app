@@ -31,6 +31,20 @@ services:
         value: https://calisthenics-web.onrender.com
       - key: LOG_LEVEL
         value: INFO
+      - key: OBJECT_STORAGE_PROVIDER
+        value: unavailable
+      - key: OBJECT_STORAGE_ENDPOINT
+        sync: false
+      - key: OBJECT_STORAGE_REGION
+        sync: false
+      - key: OBJECT_STORAGE_BUCKET
+        sync: false
+      - key: OBJECT_STORAGE_ACCESS_KEY
+        sync: false
+      - key: OBJECT_STORAGE_SECRET_KEY
+        sync: false
+      - key: OBJECT_STORAGE_PUBLIC_URL
+        sync: false
 
   - type: web
     name: calisthenics-web

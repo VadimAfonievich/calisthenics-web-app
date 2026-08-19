@@ -87,3 +87,6 @@ Generated files in `backend/internal/db/sqlc` are never edited manually.
 `user_training_schedules` stores the recurrence envelope and IANA timezone. `user_training_schedule_days` stores normalized weekdays using ISO convention: Monday = 1 through Sunday = 7, unique per schedule. `user_planned_workouts` stores one-off events and persisted overrides (`scheduled`, `completed`, `skipped`, or `cancelled`). `workout_sessions.planned_workout_id` provides the optional owned link used to set completion status.
 
 Calendar dates and weekday decisions use the profile timezone, never a raw UTC weekday. `missed` is computed for past unresolved occurrences; `skipped` is explicit and persisted. Updating or disabling a schedule changes only dynamically materialized future recurrence. Persisted completed/skipped history and workout sessions are retained. Schedule deletion is therefore implemented as `active=false`.
+# Coach content ownership and lifecycle
+
+Migration `000007_coach_studio` extends `admin_users` with the `coach` role and adds nullable `owner_user_id`, lifecycle status, cover media, and publication audit columns to content. Null owners identify backward-compatible system seed content. Lessons add validated JSONB blocks; `media_assets` stores metadata only. Composite owner/status indexes support studio lists.

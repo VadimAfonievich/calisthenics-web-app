@@ -213,6 +213,54 @@ paths:
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Current progress summary}
+  /api/v1/coach/me:
+    get:
+      summary: Resolve the authenticated Coach Studio role
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Coach role}, '403': {description: Coach role required}}
+  /api/v1/coach/dashboard:
+    get:
+      summary: Get owner-scoped content counts
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Coach dashboard}}
+  /api/v1/coach/analytics:
+    get:
+      summary: Get aggregate learner, workout, skill, and achievement analytics
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Aggregate analytics}}
+  /api/v1/coach/{kind}:
+    get:
+      summary: Search and filter owner-scoped content
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Content list}, '403': {description: Coach role required}}
+    post:
+      summary: Create coach-owned content
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Draft created}, '400': {description: Validation failed}}
+  /api/v1/coach/{kind}/{id}:
+    put:
+      summary: Update owned content
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Content updated}, '403': {description: Foreign owner}}
+  /api/v1/coach/{kind}/{id}/{action}:
+    post:
+      summary: Publish, unpublish, archive, or duplicate content
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Lifecycle updated}, '409': {description: Publish validation failed}}
+  /api/v1/coach/media:
+    get:
+      summary: List reusable owner-scoped media metadata
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Media library}}
+    post:
+      summary: Register an external HTTPS image or video
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Media registered}, '400': {description: MIME or URL invalid}}
+  /api/v1/coach/media/upload:
+    post:
+      summary: Upload to configured object storage
+      security: [{bearerAuth: []}]
+      responses: {'503': {description: Object storage is not configured}}
   /api/v1/stats:
     get:
       summary: Get lifetime and weekly workout statistics

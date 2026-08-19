@@ -189,3 +189,6 @@ Phase 12 adds a production Compose profile, protected environment template, depl
 The calendar is an authenticated backend projection over recurring schedules, persisted one-off/override rows, and workout sessions. A range request loads schedules and planned rows in bounded queries and materializes recurrence in memory; it never writes years of future occurrences. Starting a recurring occurrence materializes only that date and links it to the workout session. Workout completion remains the source of truth for XP, streaks, achievements, and the calendar `completed` status.
 
 The React mobile UI provides `/calendar` (month grid, week strip, selected-day list, and create form) and `/calendar/schedules` (schedule management). Home consumes `/calendar/today`; workout previews and skill-linked workouts deep-link into the scheduling form.
+# Coach Studio (Phase 15)
+
+Coach Studio is a role-gated CMS bounded under `/api/v1/coach`. PostgreSQL remains the source of truth for role, ownership, lifecycle, media references, and analytics. Coach queries are owner-scoped; admin roles can cross ownership boundaries. Storage is isolated behind a provider interface and Render local disk is never used.

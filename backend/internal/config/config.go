@@ -8,16 +8,25 @@ import (
 )
 
 type Config struct {
-	AppEnv              string
-	CORSOrigins         []string
-	DatabaseURL         string
-	JWTSecret           string
-	LogLevel            slog.Level
-	Port                string
-	RedisURL            string
-	TelegramBotToken    string
-	TelegramBotUsername string
-	TelegramWebAppURL   string
+	AppEnv                 string
+	CORSOrigins            []string
+	DatabaseURL            string
+	JWTSecret              string
+	LogLevel               slog.Level
+	Port                   string
+	RedisURL               string
+	TelegramBotToken       string
+	TelegramBotUsername    string
+	TelegramWebAppURL      string
+	ObjectStorageProvider  string
+	ObjectStorageEndpoint  string
+	ObjectStorageRegion    string
+	ObjectStorageBucket    string
+	ObjectStorageAccessKey string
+	ObjectStorageSecretKey string
+	ObjectStoragePublicURL string
+	MaxImageUploadBytes    int64
+	MaxVideoUploadBytes    int64
 }
 
 func Load() (Config, error) {
@@ -27,16 +36,25 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		AppEnv:              envOrDefault("APP_ENV", "development"),
-		CORSOrigins:         splitCSV(envOrDefault("CORS_ORIGINS", "http://localhost:5173")),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		JWTSecret:           os.Getenv("JWT_SECRET"),
-		LogLevel:            *logLevel,
-		Port:                envOrDefault("PORT", "8080"),
-		RedisURL:            os.Getenv("REDIS_URL"),
-		TelegramBotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
-		TelegramBotUsername: os.Getenv("TELEGRAM_BOT_USERNAME"),
-		TelegramWebAppURL:   os.Getenv("TELEGRAM_WEBAPP_URL"),
+		AppEnv:                 envOrDefault("APP_ENV", "development"),
+		CORSOrigins:            splitCSV(envOrDefault("CORS_ORIGINS", "http://localhost:5173")),
+		DatabaseURL:            os.Getenv("DATABASE_URL"),
+		JWTSecret:              os.Getenv("JWT_SECRET"),
+		LogLevel:               *logLevel,
+		Port:                   envOrDefault("PORT", "8080"),
+		RedisURL:               os.Getenv("REDIS_URL"),
+		TelegramBotToken:       os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramBotUsername:    os.Getenv("TELEGRAM_BOT_USERNAME"),
+		TelegramWebAppURL:      os.Getenv("TELEGRAM_WEBAPP_URL"),
+		ObjectStorageProvider:  envOrDefault("OBJECT_STORAGE_PROVIDER", "unavailable"),
+		ObjectStorageEndpoint:  os.Getenv("OBJECT_STORAGE_ENDPOINT"),
+		ObjectStorageRegion:    os.Getenv("OBJECT_STORAGE_REGION"),
+		ObjectStorageBucket:    os.Getenv("OBJECT_STORAGE_BUCKET"),
+		ObjectStorageAccessKey: os.Getenv("OBJECT_STORAGE_ACCESS_KEY"),
+		ObjectStorageSecretKey: os.Getenv("OBJECT_STORAGE_SECRET_KEY"),
+		ObjectStoragePublicURL: os.Getenv("OBJECT_STORAGE_PUBLIC_URL"),
+		MaxImageUploadBytes:    10 << 20,
+		MaxVideoUploadBytes:    500 << 20,
 	}
 
 	if cfg.DatabaseURL == "" || cfg.RedisURL == "" || cfg.JWTSecret == "" {
