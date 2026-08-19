@@ -32,7 +32,20 @@ paths:
       summary: Get the current user profile
       security: [{bearerAuth: []}]
       responses:
-        '200': {description: Current user}
+        '200':
+          description: Current user, authoritative role, and permitted UI modes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      role: {type: string, enum: [user, coach, admin, super_admin]}
+                      available_modes:
+                        type: array
+                        items: {type: string, enum: [student, coach]}
         '401': {description: Missing or invalid access token}
   /api/v1/lessons:
     get:

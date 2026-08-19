@@ -1,0 +1,11 @@
+import { useNavigate } from 'react-router-dom'
+import { useSessionStore } from '../store/session'
+import type { AppMode, UserRole } from '../api/auth'
+
+const roleLabel=(role:UserRole)=>role==='coach'?'Тренер':role==='admin'||role==='super_admin'?'Администратор':''
+export function ProfilePage(){
+  const {user,appMode,setAppMode}=useSessionStore(); const navigate=useNavigate()
+  if(!user) return <div className="notice skeleton">Загружаем профиль…</div>
+  const select=(mode:AppMode)=>{if(setAppMode(mode)) navigate(mode==='coach'?'/coach':'/')}
+  return <div className="stack profile-page"><h2>Профиль</h2><section className="card profile-identity">{user.photo_url?<img className="profile-avatar" src={user.photo_url} alt=""/>:<div className="profile-avatar profile-avatar-fallback">{user.display_name.slice(0,1).toUpperCase()}</div>}<div><h3>{user.display_name}</h3>{user.username&&<p className="muted">@{user.username}</p>}{roleLabel(user.role)&&<span className="role-badge">{roleLabel(user.role)}</span>}</div></section><section className="profile-stats"><div className="card"><b>Уровень {user.level}</b></div><div className="card"><b>{user.xp} XP</b></div><div className="card"><b>🔥 {user.current_streak} дн.</b></div></section><section className="stack"><div><p className="eyebrow">РЕЖИМ ПРИЛОЖЕНИЯ</p><h3>{appMode==='coach'?'Тренер':'Ученик'}</h3></div><button className={`card mode-card ${appMode==='student'?'selected':''}`} onClick={()=>select('student')}><b>Ученик {appMode==='student'&&'✓'}</b><span>Тренировки, навыки и личный прогресс</span></button>{user.available_modes.includes('coach')&&<button className={`card mode-card ${appMode==='coach'?'selected':''}`} onClick={()=>select('coach')}><b>Тренер {appMode==='coach'&&'✓'}</b><span>Управление контентом и аналитика</span></button>}</section></div>
+}

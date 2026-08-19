@@ -29,7 +29,7 @@ func TestMeRequiresBearerToken(t *testing.T) {
 }
 
 func TestMeReturnsAuthenticatedUser(t *testing.T) {
-	user := users.User{ID: "11111111-1111-1111-1111-111111111111", FirstName: "Анна", DisplayName: "Анна", Level: 1, Timezone: "UTC"}
+	user := users.User{ID: "11111111-1111-1111-1111-111111111111", FirstName: "Анна", DisplayName: "Анна", Level: 1, Timezone: "UTC", Role: "coach", AvailableModes: []string{"student", "coach"}}
 	token, err := auth.IssueToken(user.ID, "secret", time.Now(), time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestMeReturnsAuthenticatedUser(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer "+token)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Анна") {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Анна") || !strings.Contains(response.Body.String(), `"role":"coach"`) || !strings.Contains(response.Body.String(), `"available_modes":["student","coach"]`) {
 		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 }

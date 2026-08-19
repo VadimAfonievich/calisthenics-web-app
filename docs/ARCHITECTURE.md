@@ -192,3 +192,5 @@ The React mobile UI provides `/calendar` (month grid, week strip, selected-day l
 # Coach Studio (Phase 15)
 
 Coach Studio is a role-gated CMS bounded under `/api/v1/coach`. PostgreSQL remains the source of truth for role, ownership, lifecycle, media references, and analytics. Coach queries are owner-scoped; admin roles can cross ownership boundaries. Storage is isolated behind a provider interface and Render local disk is never used.
+
+The authorization role and frontend application mode are deliberately separate. `/me` derives `role` and `available_modes` from `admin_users` on every authenticated session. The locally persisted `student`/`coach` mode controls only the shell, navigation, and default destination; backend coach middleware remains the security boundary. This separation also leaves room for future invitations, onboarding, and workspace membership without trusting client state.
