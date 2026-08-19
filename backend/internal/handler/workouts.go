@@ -12,11 +12,25 @@ import (
 )
 
 type WorkoutStore interface {
+	List(context.Context, string) ([]workouts.CatalogItem, error)
 	Today(context.Context) (workouts.Workout, error)
 	Get(context.Context, string) (workouts.Workout, error)
 	Start(context.Context, string, string) (workouts.Session, error)
+	GetSession(context.Context, string, string) (workouts.ActiveSession, error)
 	RecordSet(context.Context, string, string, workouts.SetInput) error
 	Complete(context.Context, string, string, int32) (workouts.Session, error)
+}
+
+func listWorkouts(s WorkoutStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, _ := wu(r)
+		items, err := s.List(r.Context(), u)
+		if err != nil {
+			writeError(w, 500, "WORKOUTS_UNAVAILABLE", "Could not load workouts")
+			return
+		}
+		writeJSON(w, 200, map[string]any{"workouts": items})
+	}
 }
 
 func wu(r *http.Request) (string, bool) { return middleware.UserID(r.Context()) }
@@ -68,6 +82,22 @@ func start(s WorkoutStore) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, 201, map[string]any{"session": x})
+	}
+}
+func getWorkoutSession(s WorkoutStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sessionID := chi.URLParam(r, "id")
+		if !validUUID(sessionID) {
+			writeError(w, 400, "INVALID_INPUT", "Workout session id must be a valid UUID")
+			return
+		}
+		u, _ := wu(r)
+		x, err := s.GetSession(r.Context(), u, sessionID)
+		if err != nil {
+			writeError(w, wh(err), "WORKOUT_SESSION_NOT_FOUND", "Workout session not found")
+			return
+		}
+		writeJSON(w, 200, x)
 	}
 }
 func set(s WorkoutStore) http.HandlerFunc {

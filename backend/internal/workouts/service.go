@@ -30,16 +30,44 @@ type Workout struct {
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
 	Minutes     int32      `json:"estimated_minutes"`
+	Difficulty  string     `json:"difficulty"`
+	ProgramID   string     `json:"program_id"`
+	ProgramName string     `json:"program_name"`
 	Exercises   []Exercise `json:"exercises"`
 }
+type CatalogItem struct {
+	ID              string  `json:"id"`
+	Title           string  `json:"title"`
+	Description     string  `json:"description"`
+	Minutes         int32   `json:"estimated_minutes"`
+	Difficulty      string  `json:"difficulty"`
+	ExerciseCount   int32   `json:"exercise_count"`
+	ProgramID       string  `json:"program_id"`
+	ProgramName     string  `json:"program_name"`
+	Status          *string `json:"status,omitempty"`
+	ActiveSessionID *string `json:"active_session_id,omitempty"`
+}
 type Session struct {
-	ID                   string   `json:"id"`
-	WorkoutID            string   `json:"workout_id"`
-	Status               string   `json:"status"`
-	Duration             int32    `json:"duration_seconds"`
-	XP                   int32    `json:"xp_earned"`
-	CurrentStreak        int32    `json:"current_streak"`
-	UnlockedAchievements []string `json:"unlocked_achievements"`
+	ID                   string    `json:"id"`
+	WorkoutID            string    `json:"workout_id"`
+	Status               string    `json:"status"`
+	Duration             int32     `json:"duration_seconds"`
+	XP                   int32     `json:"xp_earned"`
+	CurrentStreak        int32     `json:"current_streak"`
+	UnlockedAchievements []string  `json:"unlocked_achievements"`
+	StartedAt            time.Time `json:"started_at"`
+}
+type CompletedSet struct {
+	ExerciseID string `json:"exercise_id"`
+	SetNumber  int16  `json:"set_number"`
+	Reps       *int16 `json:"reps,omitempty"`
+	Duration   *int32 `json:"duration_seconds,omitempty"`
+	Completed  bool   `json:"completed"`
+}
+type ActiveSession struct {
+	Session       Session        `json:"session"`
+	Workout       Workout        `json:"workout"`
+	CompletedSets []CompletedSet `json:"completed_sets"`
 }
 type SetInput struct {
 	ExerciseID string `json:"exercise_id"`
@@ -53,7 +81,7 @@ type Service struct{ pool *pgxpool.Pool }
 func NewService(p *pgxpool.Pool) *Service { return &Service{p} }
 func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	var w Workout
-	e := s.pool.QueryRow(ctx, `SELECT id::text,title,description,estimated_minutes FROM workouts WHERE id=$1::uuid`, id).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes)
+	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,p.difficulty,p.id::text,p.name FROM workouts w JOIN programs p ON p.id=w.program_id WHERE w.id=$1::uuid AND p.published`, id).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return w, ErrNotFound
 	}
@@ -74,6 +102,22 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	}
 	return w, rows.Err()
 }
+func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error) {
+	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,p.difficulty,COUNT(we.id)::int,p.id::text,p.name,active.status,active.id::text FROM workouts w JOIN programs p ON p.id=w.program_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE p.published GROUP BY w.id,p.id,active.status,active.id ORDER BY p.difficulty,p.name,w.day_number`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CatalogItem{}
+	for rows.Next() {
+		var item CatalogItem
+		if err = rows.Scan(&item.ID, &item.Title, &item.Description, &item.Minutes, &item.Difficulty, &item.ExerciseCount, &item.ProgramID, &item.ProgramName, &item.Status, &item.ActiveSessionID); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
 func (s *Service) Today(ctx context.Context) (Workout, error) {
 	var id string
 	e := s.pool.QueryRow(ctx, `SELECT w.id::text FROM workouts w JOIN programs p ON p.id=w.program_id WHERE p.published ORDER BY p.difficulty,w.day_number LIMIT 1`).Scan(&id)
@@ -91,8 +135,36 @@ func (s *Service) Start(ctx context.Context, u, w string) (Session, error) {
 		return Session{}, e
 	}
 	var x Session
-	e := s.pool.QueryRow(ctx, `INSERT INTO workout_sessions(user_id,workout_id) VALUES($1::uuid,$2::uuid) RETURNING id::text,workout_id::text,status,duration_seconds,xp_earned`, u, w).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP)
+	e := s.pool.QueryRow(ctx, `WITH existing AS (SELECT id,workout_id,status,duration_seconds,xp_earned,started_at FROM workout_sessions WHERE user_id=$1::uuid AND workout_id=$2::uuid AND status='started' ORDER BY started_at DESC LIMIT 1), created AS (INSERT INTO workout_sessions(user_id,workout_id) SELECT $1::uuid,$2::uuid WHERE NOT EXISTS(SELECT 1 FROM existing) RETURNING id,workout_id,status,duration_seconds,xp_earned,started_at) SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at FROM existing UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at FROM created LIMIT 1`, u, w).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &x.StartedAt)
 	return x, e
+}
+func (s *Service) GetSession(ctx context.Context, userID, sessionID string) (ActiveSession, error) {
+	var out ActiveSession
+	err := s.pool.QueryRow(ctx, `SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at FROM workout_sessions WHERE id=$1::uuid AND user_id=$2::uuid`, sessionID, userID).Scan(&out.Session.ID, &out.Session.WorkoutID, &out.Session.Status, &out.Session.Duration, &out.Session.XP, &out.Session.StartedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, ErrForbidden
+	}
+	if err != nil {
+		return out, err
+	}
+	out.Workout, err = s.workout(ctx, out.Session.WorkoutID)
+	if err != nil {
+		return out, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT exercise_id::text,set_number,reps,duration_seconds,completed FROM exercise_sets WHERE session_id=$1::uuid ORDER BY created_at,set_number`, sessionID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	out.CompletedSets = []CompletedSet{}
+	for rows.Next() {
+		var item CompletedSet
+		if err = rows.Scan(&item.ExerciseID, &item.SetNumber, &item.Reps, &item.Duration, &item.Completed); err != nil {
+			return out, err
+		}
+		out.CompletedSets = append(out.CompletedSets, item)
+	}
+	return out, rows.Err()
 }
 func (s *Service) RecordSet(ctx context.Context, u, sid string, in SetInput) error {
 	tag, e := s.pool.Exec(ctx, `INSERT INTO exercise_sets(session_id,exercise_id,set_number,reps,duration_seconds,completed) SELECT $1::uuid,$2::uuid,$3,$4,$5,$6 FROM workout_sessions ws WHERE ws.id=$1::uuid AND ws.user_id=$7::uuid AND ws.status='started' ON CONFLICT(session_id,exercise_id,set_number) DO UPDATE SET reps=EXCLUDED.reps,duration_seconds=EXCLUDED.duration_seconds,completed=EXCLUDED.completed`, sid, in.ExerciseID, in.Number, in.Reps, in.Duration, in.Completed, u)
