@@ -15,7 +15,7 @@ describe('entity routes', () => {
   })
 
   it('builds a workout navigation route with the UUID', () => {
-    expect(workoutRoute(workoutID)).toBe(`/workout/${workoutID}`)
+    expect(workoutRoute(workoutID)).toBe(`/workouts/${workoutID}`)
   })
 
   it('rejects an undefined lesson id before fetch', async () => {

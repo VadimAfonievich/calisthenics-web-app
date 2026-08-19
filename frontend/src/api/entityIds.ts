@@ -10,4 +10,4 @@ export function requireEntityID(id: unknown, entity: string): string {
 }
 
 export const lessonRoute = (id: unknown) => isValidEntityID(id) ? `/lessons/${id}` : null
-export const workoutRoute = (id: unknown) => isValidEntityID(id) ? `/workout/${id}` : null
+export const workoutRoute = (id: unknown) => isValidEntityID(id) ? `/workouts/${id}` : null
