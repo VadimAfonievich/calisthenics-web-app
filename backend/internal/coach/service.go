@@ -294,9 +294,9 @@ func (s *Service) Options(ctx context.Context, user string, role Role) (Options,
 	sets := []struct {
 		q   string
 		dst *[]Option
-	}{{`SELECT id::text,name FROM lesson_categories ORDER BY sort_order,name`, &out.Categories}, {`SELECT id::text,name FROM exercises WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Exercises}, {`SELECT id::text,name FROM programs WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Programs}, {`SELECT id::text,title FROM workouts WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY title`, &out.Workouts}, {`SELECT id::text,name FROM skills WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Skills}, {`SELECT id::text,original_filename FROM media_assets WHERE status='ready' AND ($1 OR owner_user_id=$2::uuid) ORDER BY created_at DESC`, &out.Media}}
-	for _, set := range sets {
-		rows, e := s.pool.Query(ctx, set.q, role.CanManageAll(), user)
+	}{{`SELECT id::text,name FROM lesson_categories ORDER BY sort_order,name`, &out.Categories}, {`SELECT id::text,name FROM exercises WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Exercises}, {`SELECT id::text,name FROM programs WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Programs}, {`SELECT id::text,title FROM workouts WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY title`, &out.Workouts}, {`SELECT id::text,name FROM skills WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Skills}, {`SELECT id::text,CASE WHEN type='image' THEN 'Фото: ' ELSE 'Видео: ' END||original_filename FROM media_assets WHERE status='ready' AND ($1 OR owner_user_id=$2::uuid) ORDER BY created_at DESC`, &out.Media}}
+	for index, set := range sets {
+		rows, e := s.pool.Query(ctx, set.q, optionArgs(index, role, user)...)
 		if e != nil {
 			return out, e
 		}
@@ -311,6 +311,13 @@ func (s *Service) Options(ctx context.Context, user string, role Role) (Options,
 		rows.Close()
 	}
 	return out, nil
+}
+
+func optionArgs(index int, role Role, user string) []any {
+	if index == 0 {
+		return nil
+	}
+	return []any{role.CanManageAll(), user}
 }
 
 func (s *Service) List(ctx context.Context, kind, user string, role Role, search, status string) ([]Item, error) {

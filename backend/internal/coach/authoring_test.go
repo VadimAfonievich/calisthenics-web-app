@@ -21,3 +21,12 @@ func TestCoachOwnershipScope(t *testing.T) {
 		t.Fatal("admin should retain cross-owner scope")
 	}
 }
+
+func TestCategoryOptionsQueryHasNoUnexpectedBindArguments(t *testing.T) {
+	if got := optionArgs(0, "coach", "user-id"); len(got) != 0 {
+		t.Fatalf("category query args=%v", got)
+	}
+	if got := optionArgs(1, "coach", "user-id"); len(got) != 2 {
+		t.Fatalf("owner-scoped option args=%v", got)
+	}
+}
