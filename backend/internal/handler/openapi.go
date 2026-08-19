@@ -153,6 +153,60 @@ paths:
       summary: Idempotently master a skill and award backend XP and achievement
       security: [{bearerAuth: []}]
       responses: {'200': {description: Mastery result}, '409': {description: Final criterion or levels incomplete}}
+  /api/v1/calendar:
+    get:
+      summary: Materialize current-user schedule occurrences for a local-date range
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: from, in: query, required: true, schema: {type: string, format: date}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date}}
+      responses: {'200': {description: Calendar occurrences}, '400': {description: Invalid date range}}
+  /api/v1/calendar/today:
+    get:
+      summary: Get today's occurrences in the profile timezone
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Today's occurrences sorted by time}}
+  /api/v1/training-schedules:
+    get:
+      summary: List current-user recurring schedules
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Training schedules}}
+    post:
+      summary: Atomically create a recurring schedule and weekdays
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Created schedule}, '400': {description: Invalid input}}
+  /api/v1/training-schedules/{id}:
+    put:
+      summary: Update an owned schedule for future occurrences
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Updated schedule}, '400': {description: Invalid UUID}, '404': {description: Schedule not found}}
+    delete:
+      summary: Disable an owned schedule while preserving history
+      security: [{bearerAuth: []}]
+      responses: {'204': {description: Schedule disabled}, '404': {description: Schedule not found}}
+  /api/v1/planned-workouts:
+    post:
+      summary: Create a one-off workout or materialize a recurring occurrence
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Created planned workout}, '400': {description: Invalid input}}
+  /api/v1/planned-workouts/{id}:
+    get:
+      summary: Get an owned planned workout
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Planned workout}, '404': {description: Not found}}
+    put:
+      summary: Update an owned scheduled workout
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Updated planned workout}}
+    delete:
+      summary: Cancel an owned planned workout
+      security: [{bearerAuth: []}]
+      responses: {'204': {description: Cancelled}}
+  /api/v1/planned-workouts/{id}/skip:
+    post:
+      summary: Explicitly skip an owned planned workout
+      security: [{bearerAuth: []}]
+      responses: {'204': {description: Skipped}, '404': {description: Not found}}
   /api/v1/progress:
     get:
       summary: Get XP, level, streak, and lifetime totals

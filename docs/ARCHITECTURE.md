@@ -184,3 +184,8 @@ Phase 11 verification passed on 2026-08-18: backend unit and handler tests, fron
 ## Phase 12 delivery record
 
 Phase 12 adds a production Compose profile, protected environment template, deployment runbook, PostgreSQL backup/restore procedure, monitoring guidance, and Telegram Mini App configuration guide. Production infrastructure has no published PostgreSQL or Redis ports; application ports are loopback-only for an HTTPS reverse proxy. Database migrations run as a one-off pre-deployment step and health checks cover PostgreSQL, Redis, and the backend.
+# Training calendar (Phase 14B)
+
+The calendar is an authenticated backend projection over recurring schedules, persisted one-off/override rows, and workout sessions. A range request loads schedules and planned rows in bounded queries and materializes recurrence in memory; it never writes years of future occurrences. Starting a recurring occurrence materializes only that date and links it to the workout session. Workout completion remains the source of truth for XP, streaks, achievements, and the calendar `completed` status.
+
+The React mobile UI provides `/calendar` (month grid, week strip, selected-day list, and create form) and `/calendar/schedules` (schedule management). Home consumes `/calendar/today`; workout previews and skill-linked workouts deep-link into the scheduling form.

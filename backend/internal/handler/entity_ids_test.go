@@ -50,7 +50,7 @@ func (s *workoutIDStoreStub) Get(context.Context, string) (workouts.Workout, err
 	s.called = true
 	return workouts.Workout{}, nil
 }
-func (s *workoutIDStoreStub) Start(context.Context, string, string) (workouts.Session, error) {
+func (s *workoutIDStoreStub) Start(context.Context, string, string, *string) (workouts.Session, error) {
 	s.called = true
 	return workouts.Session{}, nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/admin"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/calendar"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/config"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/exercises"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/handler"
@@ -69,6 +70,7 @@ func main() {
 		Workouts:  workouts.NewService(pool),
 		Progress:  progress.NewService(pool),
 		Skills:    skills.NewService(pool),
+		Calendar:  calendar.NewService(pool),
 		Health: handler.HealthDependencies{
 			Postgres: func(checkContext context.Context) error { return pingPostgres(checkContext, pool) },
 			Redis:    func(checkContext context.Context) error { return pingRedis(checkContext, redisClient) },

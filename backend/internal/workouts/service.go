@@ -57,6 +57,7 @@ type Session struct {
 	CurrentStreak        int32     `json:"current_streak"`
 	UnlockedAchievements []string  `json:"unlocked_achievements"`
 	StartedAt            time.Time `json:"started_at"`
+	PlannedWorkoutID     *string   `json:"planned_workout_id,omitempty"`
 }
 type CompletedSet struct {
 	ExerciseID string `json:"exercise_id"`
@@ -131,12 +132,26 @@ func (s *Service) Today(ctx context.Context) (Workout, error) {
 	return s.workout(ctx, id)
 }
 func (s *Service) Get(ctx context.Context, id string) (Workout, error) { return s.workout(ctx, id) }
-func (s *Service) Start(ctx context.Context, u, w string) (Session, error) {
+func (s *Service) Start(ctx context.Context, u, w string, plannedID *string) (Session, error) {
 	if _, e := s.workout(ctx, w); e != nil {
 		return Session{}, e
 	}
+	if plannedID != nil {
+		var owner, plannedWorkout string
+		if e := s.pool.QueryRow(ctx, `SELECT user_id::text,workout_id::text FROM user_planned_workouts WHERE id=$1::uuid AND status='scheduled'`, *plannedID).Scan(&owner, &plannedWorkout); errors.Is(e, pgx.ErrNoRows) {
+			return Session{}, ErrNotFound
+		} else if e != nil {
+			return Session{}, e
+		}
+		if owner != u || plannedWorkout != w {
+			return Session{}, ErrForbidden
+		}
+		if _, e := s.pool.Exec(ctx, `UPDATE workout_sessions SET planned_workout_id=$3::uuid WHERE user_id=$1::uuid AND workout_id=$2::uuid AND status='started' AND planned_workout_id IS NULL`, u, w, *plannedID); e != nil {
+			return Session{}, e
+		}
+	}
 	var x Session
-	e := s.pool.QueryRow(ctx, `WITH existing AS (SELECT id,workout_id,status,duration_seconds,xp_earned,started_at FROM workout_sessions WHERE user_id=$1::uuid AND workout_id=$2::uuid AND status='started' ORDER BY started_at DESC LIMIT 1), created AS (INSERT INTO workout_sessions(user_id,workout_id) SELECT $1::uuid,$2::uuid WHERE NOT EXISTS(SELECT 1 FROM existing) RETURNING id,workout_id,status,duration_seconds,xp_earned,started_at) SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at FROM existing UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at FROM created LIMIT 1`, u, w).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &x.StartedAt)
+	e := s.pool.QueryRow(ctx, `WITH existing AS (SELECT id,workout_id,status,duration_seconds,xp_earned,started_at,planned_workout_id FROM workout_sessions WHERE user_id=$1::uuid AND workout_id=$2::uuid AND status='started' ORDER BY started_at DESC LIMIT 1), created AS (INSERT INTO workout_sessions(user_id,workout_id,planned_workout_id) SELECT $1::uuid,$2::uuid,$3::uuid WHERE NOT EXISTS(SELECT 1 FROM existing) RETURNING id,workout_id,status,duration_seconds,xp_earned,started_at,planned_workout_id) SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text FROM existing UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text FROM created LIMIT 1`, u, w, plannedID).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &x.StartedAt, &x.PlannedWorkoutID)
 	return x, e
 }
 func (s *Service) GetSession(ctx context.Context, userID, sessionID string) (ActiveSession, error) {
@@ -255,6 +270,10 @@ func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (
 	}
 	x.XP = CompletionXP + achievementXP
 	_, e = tx.Exec(ctx, `UPDATE workout_sessions SET xp_earned=$2 WHERE id=$1::uuid`, sid, x.XP)
+	if e != nil {
+		return x, e
+	}
+	_, e = tx.Exec(ctx, `UPDATE user_planned_workouts pw SET status='completed',updated_at=NOW() FROM workout_sessions ws WHERE ws.id=$1::uuid AND ws.planned_workout_id=pw.id AND pw.user_id=$2::uuid`, sid, u)
 	if e != nil {
 		return x, e
 	}
