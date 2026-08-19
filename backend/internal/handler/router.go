@@ -82,12 +82,22 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				coach.Get("/dashboard", coachDashboard(dependencies.Coach))
 				coach.Get("/analytics", coachAnalytics(dependencies.Coach))
 				coach.Get("/media", coachMedia(dependencies.Coach))
+				coach.Get("/options", func(w http.ResponseWriter, r *http.Request) {
+					u, role := coachIdentity(r)
+					x, e := dependencies.Coach.Options(r.Context(), u, role)
+					if e != nil {
+						coachErr(w, e)
+						return
+					}
+					writeJSON(w, 200, x)
+				})
 				coach.Post("/media", coachMedia(dependencies.Coach))
 				coach.Post("/media/upload", coachUploadUnavailable)
 				coach.Delete("/media/{id}", coachMediaDelete(dependencies.Coach))
 				coach.Get("/{kind}", coachContent(dependencies.Coach))
 				coach.Post("/{kind}", coachContent(dependencies.Coach))
 				coach.Put("/{kind}/{id}", coachContentID(dependencies.Coach))
+				coach.Get("/{kind}/{id}", coachContentID(dependencies.Coach))
 				coach.Post("/{kind}/{id}/{action}", coachAction(dependencies.Coach))
 			})
 			protected.Group(func(adminRoutes chi.Router) {

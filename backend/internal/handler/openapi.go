@@ -241,6 +241,11 @@ paths:
       summary: Get aggregate learner, workout, skill, and achievement analytics
       security: [{bearerAuth: []}]
       responses: {'200': {description: Aggregate analytics}}
+  /api/v1/coach/options:
+    get:
+      summary: Get human-friendly selector options for Coach editors
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Categories, exercises, programs, workouts, and skills}}
   /api/v1/coach/{kind}:
     get:
       summary: Search and filter owner-scoped content
@@ -251,13 +256,17 @@ paths:
       security: [{bearerAuth: []}]
       responses: {'201': {description: Draft created}, '400': {description: Validation failed}}
   /api/v1/coach/{kind}/{id}:
+    get:
+      summary: Load owned content into an editor
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Editable content detail}, '400': {description: Invalid UUID}, '403': {description: Foreign owner}}
     put:
       summary: Update owned content
       security: [{bearerAuth: []}]
       responses: {'200': {description: Content updated}, '403': {description: Foreign owner}}
   /api/v1/coach/{kind}/{id}/{action}:
     post:
-      summary: Publish, unpublish, archive, or duplicate content
+      summary: Publish, unpublish, archive, restore, or duplicate content
       security: [{bearerAuth: []}]
       responses: {'200': {description: Lifecycle updated}, '409': {description: Publish validation failed}}
   /api/v1/coach/media:

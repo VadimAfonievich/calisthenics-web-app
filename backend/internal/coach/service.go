@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -57,6 +58,18 @@ type Item struct {
 	Difficulty  string    `json:"difficulty"`
 	OwnerUserID *string   `json:"owner_user_id"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+type Option struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+type Options struct {
+	Categories []Option `json:"categories"`
+	Exercises  []Option `json:"exercises"`
+	Programs   []Option `json:"programs"`
+	Workouts   []Option `json:"workouts"`
+	Skills     []Option `json:"skills"`
+	Media      []Option `json:"media"`
 }
 type Block struct {
 	Type    string   `json:"type"`
@@ -203,6 +216,103 @@ func (s *Service) metrics(ctx context.Context, q string) ([]Metric, error) {
 
 var tables = map[string]struct{ table, name, slug string }{"lessons": {"lessons", "title", "slug"}, "exercises": {"exercises", "name", "slug"}, "programs": {"programs", "name", "slug"}, "workouts": {"workouts", "title", "''"}, "skills": {"skills", "name", "code"}}
 
+var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugBase(value string) string {
+	r := strings.NewReplacer("а", "a", "б", "b", "в", "v", "г", "g", "д", "d", "е", "e", "ё", "e", "ж", "zh", "з", "z", "и", "i", "й", "y", "к", "k", "л", "l", "м", "m", "н", "n", "о", "o", "п", "p", "р", "r", "с", "s", "т", "t", "у", "u", "ф", "f", "х", "h", "ц", "ts", "ч", "ch", "ш", "sh", "щ", "sch", "ъ", "", "ы", "y", "ь", "", "э", "e", "ю", "yu", "я", "ya")
+	s := nonSlug.ReplaceAllString(r.Replace(strings.ToLower(strings.TrimSpace(value))), "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		return "content"
+	}
+	return s
+}
+func (s *Service) uniqueSlug(ctx context.Context, table, value string, id *string) (string, error) {
+	base := slugBase(value)
+	candidate := base
+	var exclude any
+	if id != nil {
+		exclude = *id
+	}
+	for n := 1; n < 1000; n++ {
+		var exists bool
+		q := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE slug=$1 AND ($2::uuid IS NULL OR id<>$2::uuid))", table)
+		if e := s.pool.QueryRow(ctx, q, candidate, exclude).Scan(&exists); e != nil {
+			return "", e
+		}
+		if !exists {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s-%d", base, n+1)
+	}
+	return "", ErrInvalid
+}
+
+func (s *Service) Get(ctx context.Context, kind, id, user string, role Role) (map[string]any, error) {
+	x, ok := tables[kind]
+	if !ok {
+		return nil, ErrInvalid
+	}
+	q := fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid)", x.table)
+	var raw []byte
+	if e := s.pool.QueryRow(ctx, q, id, role.CanManageAll(), user).Scan(&raw); errors.Is(e, pgx.ErrNoRows) {
+		return nil, ErrForbidden
+	} else if e != nil {
+		return nil, e
+	}
+	var out map[string]any
+	if e := json.Unmarshal(raw, &out); e != nil {
+		return nil, e
+	}
+	var extra []byte
+	switch kind {
+	case "workouts":
+		_ = s.pool.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(we) ORDER BY sort_order),'[]') FROM workout_exercises we WHERE workout_id=$1::uuid`, id).Scan(&extra)
+		out["exercises"] = json.RawMessage(extra)
+	case "programs":
+		_ = s.pool.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(pl) ORDER BY sort_order),'[]') FROM program_levels pl WHERE program_id=$1::uuid`, id).Scan(&extra)
+		out["levels"] = json.RawMessage(extra)
+	case "skills":
+		_ = s.pool.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(sl) ORDER BY sort_order),'[]') FROM skill_levels sl WHERE skill_id=$1::uuid`, id).Scan(&extra)
+		out["levels"] = json.RawMessage(extra)
+		var req []string
+		rows, e := s.pool.Query(ctx, `SELECT required_skill_id::text FROM skill_requirements WHERE skill_id=$1::uuid`, id)
+		if e == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var v string
+				_ = rows.Scan(&v)
+				req = append(req, v)
+			}
+		}
+		out["requirements"] = req
+	}
+	return out, nil
+}
+func (s *Service) Options(ctx context.Context, user string, role Role) (Options, error) {
+	var out Options
+	sets := []struct {
+		q   string
+		dst *[]Option
+	}{{`SELECT id::text,name FROM lesson_categories ORDER BY sort_order,name`, &out.Categories}, {`SELECT id::text,name FROM exercises WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Exercises}, {`SELECT id::text,name FROM programs WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Programs}, {`SELECT id::text,title FROM workouts WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY title`, &out.Workouts}, {`SELECT id::text,name FROM skills WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Skills}, {`SELECT id::text,original_filename FROM media_assets WHERE status='ready' AND ($1 OR owner_user_id=$2::uuid) ORDER BY created_at DESC`, &out.Media}}
+	for _, set := range sets {
+		rows, e := s.pool.Query(ctx, set.q, role.CanManageAll(), user)
+		if e != nil {
+			return out, e
+		}
+		for rows.Next() {
+			var x Option
+			if e = rows.Scan(&x.ID, &x.Name); e != nil {
+				rows.Close()
+				return out, e
+			}
+			*set.dst = append(*set.dst, x)
+		}
+		rows.Close()
+	}
+	return out, nil
+}
+
 func (s *Service) List(ctx context.Context, kind, user string, role Role, search, status string) ([]Item, error) {
 	x, ok := tables[kind]
 	if !ok {
@@ -257,8 +367,15 @@ func validBlocks(blocks []Block) bool {
 	return true
 }
 func (s *Service) SaveLesson(ctx context.Context, user string, role Role, id *string, in LessonInput) (string, error) {
-	if !validBlocks(in.Blocks) || strings.TrimSpace(in.Title) == "" || strings.TrimSpace(in.Slug) == "" || in.DurationMinutes < 1 {
+	if !validBlocks(in.Blocks) || strings.TrimSpace(in.Title) == "" || in.DurationMinutes < 1 || strings.TrimSpace(in.CategoryID) == "" {
 		return "", ErrInvalid
+	}
+	if in.Slug == "" {
+		var e error
+		in.Slug, e = s.uniqueSlug(ctx, "lessons", in.Title, id)
+		if e != nil {
+			return "", e
+		}
 	}
 	blocks, _ := json.Marshal(in.Blocks)
 	if id == nil {
@@ -293,6 +410,13 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 	if strings.TrimSpace(in.Description) == "" || strings.TrimSpace(in.Difficulty) == "" {
 		return "", ErrInvalid
 	}
+	if (kind == "exercises" || kind == "programs") && in.Slug == "" {
+		var e error
+		in.Slug, e = s.uniqueSlug(ctx, map[string]string{"exercises": "exercises", "programs": "programs"}[kind], in.Name, id)
+		if e != nil {
+			return "", e
+		}
+	}
 	tx, e := s.pool.Begin(ctx)
 	if e != nil {
 		return "", e
@@ -301,7 +425,7 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 	var out string
 	switch kind {
 	case "exercises":
-		if in.Name == "" || in.Slug == "" || len(in.MuscleGroups) == 0 {
+		if in.Name == "" || len(in.MuscleGroups) == 0 {
 			return "", ErrInvalid
 		}
 		if id == nil {
@@ -310,7 +434,7 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,movement_type=$12,coach_tips=$13,cover_media_id=$14::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.MovementType, in.CoachTips, in.CoverMediaID).Scan(&out)
 		}
 	case "programs":
-		if in.Name == "" || in.Slug == "" || in.DurationWeeks < 1 {
+		if in.Name == "" || in.DurationWeeks < 1 {
 			return "", ErrInvalid
 		}
 		if id == nil {
@@ -346,8 +470,11 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			}
 		}
 	case "skills":
-		if in.Name == "" || in.Code == "" || in.Icon == "" || in.FinalCriterionValue < 1 || len(in.Levels) == 0 {
+		if in.Name == "" || in.Icon == "" || in.FinalCriterionValue < 1 || len(in.Levels) == 0 {
 			return "", ErrInvalid
+		}
+		if in.Code == "" {
+			in.Code = strings.ToUpper(strings.ReplaceAll(slugBase(in.Name), "-", "_"))
 		}
 		if id == nil {
 			e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::uuid,'draft',$11::uuid) RETURNING id::text`, in.Code, in.Name, in.Description, in.Category, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, user, in.CoverMediaID).Scan(&out)
@@ -442,6 +569,14 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		return out, e
 	}
+	if kind == "exercises" {
+		var out string
+		e := s.pool.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,video_url,image_url,owner_user_id,status,movement_type,coach_tips,cover_media_id) SELECT name||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),description,instructions,common_mistakes,difficulty,muscle_groups,equipment,video_url,image_url,$2::uuid,'draft',movement_type,coach_tips,cover_media_id FROM exercises WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return "", ErrForbidden
+		}
+		return out, e
+	}
 	if kind == "workouts" {
 		tx, e := s.pool.Begin(ctx)
 		if e != nil {
@@ -477,6 +612,26 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 			return "", e
 		}
 		_, e = tx.Exec(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order) SELECT $1::uuid,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order FROM program_levels WHERE program_id=$2::uuid`, out, id)
+		if e != nil {
+			return "", e
+		}
+		return out, tx.Commit(ctx)
+	}
+	if kind == "skills" {
+		tx, e := s.pool.Begin(ctx)
+		if e != nil {
+			return "", e
+		}
+		defer tx.Rollback(ctx)
+		var out string
+		e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id) SELECT code||'_COPY_'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,6)),name||' — копия',description,category,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,$2::uuid,'draft',cover_media_id FROM skills WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return "", ErrForbidden
+		}
+		if e != nil {
+			return "", e
+		}
+		_, e = tx.Exec(ctx, `INSERT INTO skill_levels(skill_id,level_number,name,description,program_level_id,criterion_type,criterion_value,sort_order) SELECT $1::uuid,level_number,name,description,program_level_id,criterion_type,criterion_value,sort_order FROM skill_levels WHERE skill_id=$2::uuid`, out, id)
 		if e != nil {
 			return "", e
 		}

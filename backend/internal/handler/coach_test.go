@@ -21,6 +21,10 @@ func (coachStub) Analytics(context.Context) (c.Analytics, error) { return c.Anal
 func (coachStub) List(context.Context, string, string, c.Role, string, string) ([]c.Item, error) {
 	return nil, nil
 }
+func (coachStub) Get(context.Context, string, string, string, c.Role) (map[string]any, error) {
+	return map[string]any{"id": "10000000-0000-0000-0000-000000000001"}, nil
+}
+func (coachStub) Options(context.Context, string, c.Role) (c.Options, error) { return c.Options{}, nil }
 func (coachStub) SaveLesson(context.Context, string, c.Role, *string, c.LessonInput) (string, error) {
 	return "", nil
 }

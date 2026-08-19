@@ -15,6 +15,8 @@ type CoachStore interface {
 	Dashboard(context.Context, string, coachsvc.Role) (coachsvc.Dashboard, error)
 	Analytics(context.Context) (coachsvc.Analytics, error)
 	List(context.Context, string, string, coachsvc.Role, string, string) ([]coachsvc.Item, error)
+	Get(context.Context, string, string, string, coachsvc.Role) (map[string]any, error)
+	Options(context.Context, string, coachsvc.Role) (coachsvc.Options, error)
 	SaveLesson(context.Context, string, coachsvc.Role, *string, coachsvc.LessonInput) (string, error)
 	SaveBuilder(context.Context, string, string, coachsvc.Role, *string, coachsvc.BuilderInput) (string, error)
 	Lifecycle(context.Context, string, string, string, coachsvc.Role, string) error
@@ -133,6 +135,15 @@ func coachContentID(s CoachStore) http.HandlerFunc {
 			return
 		}
 		u, role := coachIdentity(r)
+		if r.Method == http.MethodGet {
+			out, e := s.Get(r.Context(), kind, id, u, role)
+			if e != nil {
+				coachErr(w, e)
+				return
+			}
+			writeJSON(w, 200, map[string]any{"item": out})
+			return
+		}
 		if r.Method == http.MethodPut {
 			if kind != "lessons" {
 				var in coachsvc.BuilderInput
@@ -179,7 +190,7 @@ func coachAction(s CoachStore) http.HandlerFunc {
 			writeJSON(w, 201, map[string]string{"id": out})
 			return
 		}
-		status := map[string]string{"publish": "published", "unpublish": "draft", "archive": "archived"}[action]
+		status := map[string]string{"publish": "published", "unpublish": "draft", "archive": "archived", "restore": "draft"}[action]
 		if status == "" {
 			invalidInput(w)
 			return
