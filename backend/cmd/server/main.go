@@ -80,13 +80,14 @@ func main() {
 		Logger:      logger,
 		CORSOrigins: cfg.CORSOrigins,
 	})
-	router = middleware.LimitBody(64<<10, middleware.RateLimit(redisClient, 120, time.Minute, router))
+	// Image files are encoded as data URLs until object storage is configured.
+	router = middleware.LimitBody(15<<20, middleware.RateLimit(redisClient, 120, time.Minute, router))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           middleware.WithRequestLogging(logger, router),
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
+		ReadTimeout:       60 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
