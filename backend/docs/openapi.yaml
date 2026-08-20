@@ -188,14 +188,48 @@ paths:
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Achievement catalog}
+  /api/v1/coach/me:
+    get:
+      summary: Get the authenticated Coach Studio role
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Coach role}, '403': {description: Coach role required}}
+  /api/v1/coach/dashboard:
+    get:
+      summary: Get system plus owned content counts matching Coach lists
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Content counts}}
+  /api/v1/coach/analytics:
+    get:
+      summary: Get aggregate learner activity analytics
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Aggregate analytics}}
+  /api/v1/coach/media:
+    get:
+      summary: List owned media assets and reference counts
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Media list}}
+    post:
+      summary: Register HTTPS or validated inline image media
+      security: [{bearerAuth: []}]
+      responses: {'201': {description: Media registered}, '400': {description: Invalid media payload}}
+  /api/v1/coach/media/{id}:
+    delete:
+      summary: Delete an unused owned media asset
+      security: [{bearerAuth: []}]
+      responses: {'204': {description: Media deleted}, '409': {description: Media is referenced by content}}
+  /api/v1/coach/media/upload:
+    post:
+      summary: Upload media to object storage (unavailable until storage is configured)
+      security: [{bearerAuth: []}]
+      responses: {'503': {description: Object storage unavailable}}
   /api/v1/coach/options:
     get:
       summary: Get human-friendly selector options for Coach editors
       security: [{bearerAuth: []}]
-      responses: {'200': {description: Categories, exercises, programs, workouts, and skills}}
+      responses: {'200': {description: Categories and status-aware exercise, program, program-level, workout, skill, and media options}}
   /api/v1/coach/{kind}:
     get:
-      summary: Search and filter owner-scoped content
+      summary: Search and filter coach-owned plus read-only system content
       security: [{bearerAuth: []}]
       responses: {'200': {description: Content list}, '403': {description: Coach role required}}
     post:
@@ -204,7 +238,7 @@ paths:
       responses: {'201': {description: Draft created}, '400': {description: Validation failed}}
   /api/v1/coach/{kind}/{id}:
     get:
-      summary: Load owned content into an editor
+      summary: Load owned or read-only system content into an editor
       security: [{bearerAuth: []}]
       responses: {'200': {description: Editable content detail}, '400': {description: Invalid UUID}, '403': {description: Foreign owner}}
     put:
@@ -215,7 +249,7 @@ paths:
     post:
       summary: Publish, unpublish, archive, restore, or duplicate content
       security: [{bearerAuth: []}]
-      responses: {'200': {description: Lifecycle updated}, '400': {description: Invalid UUID or action}, '403': {description: Foreign owner}}
+      responses: {'200': {description: Lifecycle updated without cascading to dependencies}, '400': {description: Invalid UUID, action, or unpublished dependency}, '403': {description: Foreign owner}, '409': {description: Published dependent content prevents archive}}
   /api/v1/admin/lessons:
     post:
       summary: Create a lesson (administrator only)

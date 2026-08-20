@@ -52,6 +52,7 @@ func coachIdentity(r *http.Request) (string, coachsvc.Role) {
 	return u, role
 }
 func coachErr(w http.ResponseWriter, e error) {
+	var validation *coachsvc.ValidationError
 	switch {
 	case errors.Is(e, coachsvc.ErrForbidden):
 		writeError(w, 403, "FORBIDDEN", "Content belongs to another coach")
@@ -61,8 +62,12 @@ func coachErr(w http.ResponseWriter, e error) {
 		writeError(w, 409, "MEDIA_IN_USE", "Media is referenced by content")
 	case errors.Is(e, coachsvc.ErrWorkoutDayInUse):
 		writeError(w, 409, "WORKOUT_DAY_IN_USE", "В выбранной программе уже есть тренировка с таким номером дня")
+	case errors.Is(e, coachsvc.ErrDependency):
+		writeError(w, 409, "CONTENT_IN_USE", strings.TrimPrefix(e.Error(), coachsvc.ErrDependency.Error()+": "))
+	case errors.As(e, &validation):
+		writeError(w, 400, "VALIDATION_ERROR", validation.Message)
 	case errors.Is(e, coachsvc.ErrInvalid):
-		writeError(w, 400, "INVALID_INPUT", "Content validation failed")
+		writeError(w, 400, "INVALID_INPUT", "Проверьте заполненные поля и выбранные значения")
 	default:
 		writeError(w, 500, "COACH_STUDIO_ERROR", "Coach Studio request failed")
 	}

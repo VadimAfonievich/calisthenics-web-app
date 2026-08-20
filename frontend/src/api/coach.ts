@@ -12,11 +12,7 @@ export type Dashboard = {
   media: number;
 };
 export type ContentKind =
-  | "lessons"
-  | "exercises"
-  | "workouts"
-  | "programs"
-  | "skills";
+  "lessons" | "exercises" | "workouts" | "programs" | "skills";
 export type ContentItem = {
   id: string;
   name: string;
@@ -57,6 +53,7 @@ export type BuilderExercise = {
   target_reps?: number;
   target_duration_seconds?: number;
   rest_seconds: number;
+  notes?: string;
   sort_order: number;
 };
 export type BuilderLevel = {
@@ -68,6 +65,7 @@ export type BuilderLevel = {
   unlock_rule_value: number;
   criterion_type: string;
   criterion_value: number;
+  program_level_id?: string;
   sort_order: number;
 };
 export type BuilderInput = {
@@ -79,6 +77,7 @@ export type BuilderInput = {
   estimated_minutes?: number;
   day_number?: number;
   program_id?: string;
+  program_level_id?: string;
   movement_type?: string;
   instructions?: string;
   common_mistakes?: string;
@@ -95,11 +94,18 @@ export type BuilderInput = {
   levels?: BuilderLevel[];
   requirements?: string[];
 };
-export type Option = { id: string; name: string };
+export type Option = {
+  id: string;
+  name: string;
+  status?: "draft" | "published" | "archived";
+  owner_user_id?: string;
+  parent_id?: string;
+};
 export type CoachOptions = {
   categories: Option[];
   exercises: Option[];
   programs: Option[];
+  program_levels: Option[];
   workouts: Option[];
   skills: Option[];
   media: Option[];

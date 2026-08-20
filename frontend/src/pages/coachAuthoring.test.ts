@@ -70,4 +70,9 @@ describe("workout validation", () => {
     expect(validateBuilder("workouts", { ...base, day_number: 0 })).toContain(
       "номер дня",
     ));
+  it("allows an empty workout draft but blocks publishing it", () => {
+    const draft = { ...base, exercises: [] };
+    expect(validateBuilder("workouts", draft)).toBe("");
+    expect(validateBuilder("workouts", draft, true)).toContain("упражнение");
+  });
 });

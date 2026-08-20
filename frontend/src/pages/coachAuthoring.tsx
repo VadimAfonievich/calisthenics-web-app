@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   action,
   coachMe,
@@ -76,6 +81,18 @@ function ErrorBox({ error }: { error?: Error | null }) {
     </p>
   );
 }
+function RetryBox({ text, retry }: { text: string; retry: () => void }) {
+  return (
+    <div className="notice error">
+      <p>{text}</p>
+      <button type="button" className="secondary-button" onClick={retry}>
+        Повторить
+      </button>
+    </div>
+  );
+}
+const optionName = (option: { name: string; status?: string }) =>
+  `${option.name}${option.status ? ` · ${statusLabel[option.status as keyof typeof statusLabel] ?? option.status}` : ""}`;
 export function CoachContentHome() {
   const [create, setCreate] = useState(false),
     [filter, setFilter] = useState<"all" | ContentKind>("all");
@@ -148,6 +165,12 @@ export function CoachContentHome() {
         {q.isLoading && (
           <div className="notice skeleton">Загружаем материалы…</div>
         )}
+        {q.isError && (
+          <RetryBox
+            text="Не удалось загрузить материалы Coach Studio."
+            retry={() => q.refetch()}
+          />
+        )}
         {items.map((x) => (
           <ContentCard
             key={`${x.kind}-${x.id}`}
@@ -156,7 +179,7 @@ export function CoachContentHome() {
             manageAll={manageAll}
           />
         ))}
-        {!q.isLoading && !items.length && (
+        {!q.isLoading && !q.isError && !items.length && (
           <div className="empty-state compact">
             <h3>Здесь пока нет материалов</h3>
             <p>Создайте первый материал для своих учеников.</p>
@@ -230,12 +253,15 @@ export function CoachContentList() {
         <div className="notice skeleton">Загружаем материалы…</div>
       )}
       {q.isError && (
-        <div className="notice error">Не удалось загрузить материалы.</div>
+        <RetryBox
+          text={`Не удалось загрузить: ${k.many.toLowerCase()}.`}
+          retry={() => q.refetch()}
+        />
       )}
       {q.data?.items.map((x) => (
         <ContentCard item={x} kind={k.key} key={x.id} manageAll={manageAll} />
       ))}
-      {!q.isLoading && !q.data?.items.length && (
+      {!q.isLoading && !q.isError && !q.data?.items.length && (
         <div className="empty-state compact">
           <h3>У вас пока нет своих материалов</h3>
           <p>Создайте первый материал и настройте его под своих учеников.</p>
@@ -270,7 +296,7 @@ function ContentCard({
       },
     });
   const edit = () => {
-    if (!readOnly) nav(`/coach/${kind}/${item.id}/edit`);
+    nav(`/coach/${kind}/${item.id}/edit${readOnly ? "?view=system" : ""}`);
   };
   return (
     <article className={`card content-card ${readOnly ? "read-only" : ""}`}>
@@ -286,7 +312,7 @@ function ContentCard({
             {statusLabel[item.status]}
           </p>
         </span>
-        <b>{readOnly ? "Только чтение" : "Редактировать ›"}</b>
+        <b>{readOnly ? "Просмотреть ›" : "Редактировать ›"}</b>
       </button>
       <div className="coach-actions">
         {readOnly ? (
@@ -372,13 +398,15 @@ export const workoutTarget = (mode: "reps" | "time") =>
     : { target_reps: 10, target_duration_seconds: undefined };
 export function CoachEditor() {
   const { kind = "lessons", id = "new" } = useParams();
+  const [search] = useSearchParams();
+  const readOnly = search.get("view") === "system";
   const k = kind as ContentKind;
   if (!kinds.some((x) => x.key === k))
     return <div className="notice error">Неизвестный тип материала.</div>;
   return k === "lessons" ? (
-    <LessonEditor id={id} />
+    <LessonEditor id={id} readOnly={readOnly} />
   ) : (
-    <BuilderEditor kind={k} id={id} />
+    <BuilderEditor kind={k} id={id} readOnly={readOnly} />
   );
 }
 const blankLesson: LessonInput = {
@@ -400,7 +428,13 @@ export const blockNames: Record<LessonBlock["type"], string> = {
   checklist: "Список",
   divider: "Разделитель",
 };
-function LessonEditor({ id }: { id: string }) {
+function LessonEditor({
+  id,
+  readOnly = false,
+}: {
+  id: string;
+  readOnly?: boolean;
+}) {
   const edit = id !== "new",
     nav = useNavigate(),
     [value, setValue] = useState(blankLesson),
@@ -442,8 +476,13 @@ function LessonEditor({ id }: { id: string }) {
       setValidation("");
     },
     save = useMutation({
-      mutationFn: () =>
-        edit ? updateLesson(token(), id, value) : createLesson(token(), value),
+      mutationFn: async (publish: boolean) => {
+        const result = edit
+          ? await updateLesson(token(), id, value)
+          : await createLesson(token(), value);
+        if (publish) await action(token(), "lessons", result.id, "publish");
+        return result;
+      },
       onSuccess: (x) => {
         setDirty(false);
         setSuccess(true);
@@ -473,7 +512,7 @@ function LessonEditor({ id }: { id: string }) {
       b.splice(i + d, 0, x);
       change({ ...value, blocks: b });
     };
-  const submit = () => {
+  const submit = (publish = false) => {
     if (!value.title.trim()) return setValidation("Введите название урока.");
     if (!value.category_id) return setValidation("Выберите категорию урока.");
     if (!value.short_description.trim())
@@ -498,18 +537,39 @@ function LessonEditor({ id }: { id: string }) {
       )
     )
       return setValidation("Заполните добавленные текстовые блоки.");
-    save.mutate();
+    save.mutate(publish);
   };
   return (
     <form
-      className="stack coach-editor-page"
+      className={`stack coach-editor-page ${readOnly ? "system-view" : ""}`}
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        submit(false);
       }}
     >
       <Back dirty={dirty} />
       <h2>{edit ? "Редактировать урок" : "Новый урок"}</h2>
+      {readOnly && (
+        <p className="notice">
+          Системный материал доступен только для просмотра. Создайте свою копию
+          из списка, чтобы редактировать его.
+        </p>
+      )}
+      {opts.isLoading && (
+        <p className="notice skeleton">Загружаем справочники…</p>
+      )}
+      {opts.isError && (
+        <RetryBox
+          text="Не удалось загрузить категории и медиатеку."
+          retry={() => opts.refetch()}
+        />
+      )}
+      {detail.isError && (
+        <RetryBox
+          text="Не удалось загрузить урок."
+          retry={() => detail.refetch()}
+        />
+      )}
       <label>
         Название *
         <input
@@ -667,9 +727,21 @@ function LessonEditor({ id }: { id: string }) {
       {validation && <p className="notice error">{validation}</p>}
       {success && <p className="notice success">Урок сохранён.</p>}
       {save.isError && <ErrorBox error={save.error} />}
-      <button className="primary-button sticky-save" disabled={save.isPending}>
-        {save.isPending ? "Сохраняем…" : "Сохранить урок"}
-      </button>
+      {!readOnly && (
+        <div className="publish-actions">
+          <button className="secondary-button" disabled={save.isPending}>
+            {save.isPending ? "Сохраняем…" : "Сохранить черновик"}
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={save.isPending}
+            onClick={() => submit(true)}
+          >
+            {save.isPending ? "Публикуем…" : "Сохранить и опубликовать"}
+          </button>
+        </div>
+      )}
       {picker && <BlockSheet close={() => setPicker(false)} add={add} />}
     </form>
   );
@@ -758,6 +830,7 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
 export function validateBuilder(
   kind: Exclude<ContentKind, "lessons">,
   value: BuilderInput,
+  publish = false,
 ) {
   if (!(value.name ?? value.title)?.trim()) return "Введите название.";
   if (!value.description.trim()) return "Добавьте описание.";
@@ -772,12 +845,14 @@ export function validateBuilder(
       return "Укажите номер дня программы.";
     if (!value.estimated_minutes || value.estimated_minutes < 1)
       return "Укажите продолжительность тренировки.";
-    if (!value.exercises?.length) return "Добавьте хотя бы одно упражнение.";
-    const ids = value.exercises.map((x) => x.exercise_id);
+    const exercises = value.exercises ?? [];
+    if (publish && !exercises.length)
+      return "Добавьте хотя бы одно упражнение.";
+    const ids = exercises.map((x) => x.exercise_id);
     if (new Set(ids).size !== ids.length)
       return "Одно упражнение нельзя добавить в тренировку дважды.";
     if (
-      value.exercises.some(
+      exercises.some(
         (x) =>
           x.sets < 1 ||
           x.rest_seconds < 0 ||
@@ -802,9 +877,11 @@ export function validateBuilder(
 function BuilderEditor({
   kind,
   id,
+  readOnly = false,
 }: {
   kind: Exclude<ContentKind, "lessons">;
   id: string;
+  readOnly?: boolean;
 }) {
   const edit = id !== "new",
     nav = useNavigate(),
@@ -840,6 +917,9 @@ function BuilderEditor({
               unlock_rule_value: Number(x.unlock_rule_value ?? 0),
               criterion_type: String(x.criterion_type ?? "repetitions"),
               criterion_value: Number(x.criterion_value ?? 1),
+              ...(x.program_level_id
+                ? { program_level_id: String(x.program_level_id) }
+                : {}),
               sort_order: Number(x.sort_order ?? 0),
             };
           })
@@ -899,7 +979,7 @@ function BuilderEditor({
     }),
     title = kinds.find((x) => x.key === kind)!;
   const submit = (publish = false) => {
-    const error = validateBuilder(kind, value);
+    const error = validateBuilder(kind, value, publish);
     if (error) return setValidation(error);
     save.mutate(publish);
   };
@@ -908,7 +988,7 @@ function BuilderEditor({
   );
   return (
     <form
-      className="stack coach-editor-page"
+      className={`stack coach-editor-page ${readOnly ? "system-view" : ""}`}
       onSubmit={(e) => {
         e.preventDefault();
         submit(false);
@@ -916,6 +996,27 @@ function BuilderEditor({
     >
       <Back dirty={dirty} />
       <h2>{edit ? `Редактировать: ${title.one}` : `Новая: ${title.one}`}</h2>
+      {readOnly && (
+        <p className="notice">
+          Системный материал доступен только для просмотра. Создайте свою копию
+          из списка, чтобы редактировать его.
+        </p>
+      )}
+      {opts.isLoading && (
+        <p className="notice skeleton">Загружаем справочники…</p>
+      )}
+      {opts.isError && (
+        <RetryBox
+          text="Не удалось загрузить справочники для формы."
+          retry={() => opts.refetch()}
+        />
+      )}
+      {detail.isError && (
+        <RetryBox
+          text="Не удалось загрузить материал."
+          retry={() => detail.refetch()}
+        />
+      )}
       <label>
         Название *
         <input
@@ -1123,7 +1224,12 @@ function BuilderEditor({
               }
             />
           </label>
-          <Stages value={value} change={change} kind="skills" />
+          <Stages
+            value={value}
+            change={change}
+            kind="skills"
+            opts={opts.data}
+          />
           <label>
             Предыдущий навык
             <select
@@ -1143,7 +1249,7 @@ function BuilderEditor({
                 .filter((x) => x.id !== id)
                 .map((x) => (
                   <option value={x.id} key={x.id}>
-                    {x.name}
+                    {optionName(x)}
                   </option>
                 ))}
             </select>
@@ -1154,23 +1260,25 @@ function BuilderEditor({
       {validation && <p className="notice error">{validation}</p>}
       {success && <p className="notice success">Материал сохранён.</p>}
       {save.isError && <ErrorBox error={save.error} />}
-      <div className="publish-actions">
-        <button
-          type="submit"
-          className="secondary-button"
-          disabled={save.isPending}
-        >
-          {save.isPending ? "Сохраняем…" : "Сохранить черновик"}
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={save.isPending}
-          onClick={() => submit(true)}
-        >
-          {save.isPending ? "Публикуем…" : "Сохранить и опубликовать"}
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="publish-actions">
+          <button
+            type="submit"
+            className="secondary-button"
+            disabled={save.isPending}
+          >
+            {save.isPending ? "Сохраняем…" : "Сохранить черновик"}
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={save.isPending}
+            onClick={() => submit(true)}
+          >
+            {save.isPending ? "Публикуем…" : "Сохранить и опубликовать"}
+          </button>
+        </div>
+      )}
     </form>
   );
 }
@@ -1218,10 +1326,33 @@ function WorkoutFields({
           <option value="">Выберите программу</option>
           {opts?.programs.map((x) => (
             <option value={x.id} key={x.id}>
-              {x.name}
+              {optionName(x)}
             </option>
           ))}
         </select>
+      </label>
+      <label>
+        Этап программы
+        <select
+          value={value.program_level_id ?? ""}
+          onChange={(e) =>
+            change({ ...value, program_level_id: e.target.value || undefined })
+          }
+        >
+          <option value="">Без этапа</option>
+          {opts?.program_levels
+            .filter(
+              (x) => !value.program_id || x.parent_id === value.program_id,
+            )
+            .map((x) => (
+              <option value={x.id} key={x.id}>
+                {optionName(x)}
+              </option>
+            ))}
+        </select>
+        <small>
+          Привязка определяет положение тренировки внутри программы.
+        </small>
       </label>
       <label>
         День программы
@@ -1257,7 +1388,7 @@ function WorkoutFields({
             >
               {opts?.exercises.map((o) => (
                 <option value={o.id} key={o.id}>
-                  {o.name}
+                  {optionName(o)}
                 </option>
               ))}
             </select>
@@ -1307,6 +1438,52 @@ function WorkoutFields({
                 onChange={(e) => update(i, { rest_seconds: +e.target.value })}
               />
             </label>
+            <label className="wide-field">
+              Комментарий тренера
+              <input
+                value={x.notes ?? ""}
+                onChange={(e) =>
+                  update(i, { notes: e.target.value || undefined })
+                }
+                placeholder="Подсказка ученику"
+              />
+            </label>
+            <div className="row-order-actions">
+              <button
+                type="button"
+                disabled={i === 0}
+                onClick={() => {
+                  const next = [...list];
+                  [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                  change({
+                    ...value,
+                    exercises: next.map((item, index) => ({
+                      ...item,
+                      sort_order: index,
+                    })),
+                  });
+                }}
+              >
+                ↑ Выше
+              </button>
+              <button
+                type="button"
+                disabled={i === list.length - 1}
+                onClick={() => {
+                  const next = [...list];
+                  [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                  change({
+                    ...value,
+                    exercises: next.map((item, index) => ({
+                      ...item,
+                      sort_order: index,
+                    })),
+                  });
+                }}
+              >
+                ↓ Ниже
+              </button>
+            </div>
             <button
               type="button"
               onClick={() =>
@@ -1342,10 +1519,12 @@ function Stages({
   value,
   change,
   kind,
+  opts,
 }: {
   value: BuilderInput;
   change: (x: BuilderInput) => void;
   kind: "programs" | "skills";
+  opts?: Awaited<ReturnType<typeof coachOptions>>;
 }) {
   const levels = value.levels ?? [];
   return (
@@ -1427,6 +1606,32 @@ function Stages({
             </>
           ) : (
             <>
+              <label>
+                Связанный этап программы
+                <select
+                  value={x.program_level_id ?? ""}
+                  onChange={(e) =>
+                    change({
+                      ...value,
+                      levels: levels.map((v, j) =>
+                        j === i
+                          ? {
+                              ...v,
+                              program_level_id: e.target.value || undefined,
+                            }
+                          : v,
+                      ),
+                    })
+                  }
+                >
+                  <option value="">Без связи</option>
+                  {opts?.program_levels.map((option) => (
+                    <option value={option.id} key={option.id}>
+                      {optionName(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Критерий этапа
                 <select
