@@ -1,0 +1,11 @@
+.lesson-cover,.lesson-blocks img,.lesson-blocks video{display:block;width:100%;max-height:420px;border-radius:18px;object-fit:cover}
+.lesson-blocks{display:grid;gap:14px}
+.lesson-blocks h3,.lesson-blocks p,.lesson-blocks figure{margin:0}
+.lesson-blocks figure{display:grid;gap:7px}
+.lesson-blocks figcaption{color:var(--tg-muted);font-size:.75rem}
+.lesson-text{white-space:pre-wrap;line-height:1.65}
+.lesson-callout{padding:16px;border-left:4px solid var(--tg-accent);border-radius:12px;background:rgb(52 211 153/.1)}
+.lesson-callout.warning{border-color:#f59e0b;background:rgb(245 158 11/.1)}
+.lesson-callout p{margin-top:7px}
+.lesson-checklist{display:grid;gap:8px;margin:0;padding-left:24px}
+.lesson-blocks hr{width:100%;border:0;border-top:1px solid rgb(148 163 184/.25)}

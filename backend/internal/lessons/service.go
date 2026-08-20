@@ -2,6 +2,7 @@ package lessons
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -14,16 +15,27 @@ const LessonCompletionXP = 20
 var ErrNotFound = errors.New("lesson not found")
 
 type Lesson struct {
-	ID               string `json:"id"`
-	CategoryID       string `json:"category_id"`
-	CategoryName     string `json:"category_name"`
-	Title            string `json:"title"`
-	ShortDescription string `json:"short_description"`
-	Content          string `json:"content"`
-	Difficulty       string `json:"difficulty"`
-	DurationMinutes  int32  `json:"duration_minutes"`
-	Completed        bool   `json:"completed"`
-	ProgressPercent  int16  `json:"progress_percent"`
+	ID               string  `json:"id"`
+	CategoryID       string  `json:"category_id"`
+	CategoryName     string  `json:"category_name"`
+	Title            string  `json:"title"`
+	ShortDescription string  `json:"short_description"`
+	Content          string  `json:"content"`
+	ContentBlocks    []Block `json:"content_blocks"`
+	CoverMediaURL    string  `json:"cover_media_url,omitempty"`
+	Difficulty       string  `json:"difficulty"`
+	DurationMinutes  int32   `json:"duration_minutes"`
+	Completed        bool    `json:"completed"`
+	ProgressPercent  int16   `json:"progress_percent"`
+}
+type Block struct {
+	Type     string   `json:"type"`
+	Text     string   `json:"text,omitempty"`
+	MediaID  *string  `json:"media_id,omitempty"`
+	URL      string   `json:"url,omitempty"`
+	MIMEType string   `json:"mime_type,omitempty"`
+	Alt      string   `json:"alt,omitempty"`
+	Items    []string `json:"items,omitempty"`
 }
 type Completion struct {
 	XPearned         int32 `json:"xp_earned"`
@@ -35,8 +47,7 @@ type Service struct{ pool *pgxpool.Pool }
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool} }
 
 func (s *Service) List(ctx context.Context, userID string) ([]Lesson, error) {
-	rows, err := s.pool.Query(ctx, `SELECT l.id::text, l.category_id::text, c.name, l.title, l.short_description, l.content, l.difficulty, l.duration_minutes, COALESCE(p.completed,false), COALESCE(p.progress_percent,0)
-FROM lessons l JOIN lesson_categories c ON c.id=l.category_id LEFT JOIN user_lesson_progress p ON p.lesson_id=l.id AND p.user_id=$1::uuid WHERE l.published ORDER BY c.sort_order,l.sort_order,l.title`, userID)
+	rows, err := s.pool.Query(ctx, lessonSelect+` WHERE l.published ORDER BY c.sort_order,l.sort_order,l.title`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +55,11 @@ FROM lessons l JOIN lesson_categories c ON c.id=l.category_id LEFT JOIN user_les
 	items := []Lesson{}
 	for rows.Next() {
 		var item Lesson
-		if err := rows.Scan(&item.ID, &item.CategoryID, &item.CategoryName, &item.Title, &item.ShortDescription, &item.Content, &item.Difficulty, &item.DurationMinutes, &item.Completed, &item.ProgressPercent); err != nil {
+		var blocks []byte
+		if err := rows.Scan(&item.ID, &item.CategoryID, &item.CategoryName, &item.Title, &item.ShortDescription, &item.Content, &blocks, &item.CoverMediaURL, &item.Difficulty, &item.DurationMinutes, &item.Completed, &item.ProgressPercent); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(blocks, &item.ContentBlocks); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -53,13 +68,22 @@ FROM lessons l JOIN lesson_categories c ON c.id=l.category_id LEFT JOIN user_les
 }
 func (s *Service) Get(ctx context.Context, userID, lessonID string) (Lesson, error) {
 	var item Lesson
-	err := s.pool.QueryRow(ctx, `SELECT l.id::text, l.category_id::text, c.name, l.title, l.short_description, l.content, l.difficulty, l.duration_minutes, COALESCE(p.completed,false), COALESCE(p.progress_percent,0)
-FROM lessons l JOIN lesson_categories c ON c.id=l.category_id LEFT JOIN user_lesson_progress p ON p.lesson_id=l.id AND p.user_id=$1::uuid WHERE l.id=$2::uuid AND l.published`, userID, lessonID).Scan(&item.ID, &item.CategoryID, &item.CategoryName, &item.Title, &item.ShortDescription, &item.Content, &item.Difficulty, &item.DurationMinutes, &item.Completed, &item.ProgressPercent)
+	var blocks []byte
+	err := s.pool.QueryRow(ctx, lessonSelect+` WHERE l.id=$2::uuid AND l.published`, userID, lessonID).Scan(&item.ID, &item.CategoryID, &item.CategoryName, &item.Title, &item.ShortDescription, &item.Content, &blocks, &item.CoverMediaURL, &item.Difficulty, &item.DurationMinutes, &item.Completed, &item.ProgressPercent)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Lesson{}, ErrNotFound
 	}
+	if err == nil {
+		err = json.Unmarshal(blocks, &item.ContentBlocks)
+	}
 	return item, err
 }
+
+const lessonSelect = `SELECT l.id::text,l.category_id::text,c.name,l.title,l.short_description,l.content,
+COALESCE((SELECT jsonb_agg(CASE WHEN b.value ? 'media_id' THEN b.value || jsonb_build_object('url',m.url,'mime_type',m.mime_type,'alt',m.original_filename) ELSE b.value END ORDER BY b.ordinality) FROM jsonb_array_elements(l.content_blocks) WITH ORDINALITY b(value,ordinality) LEFT JOIN media_assets m ON m.id::text=b.value->>'media_id'),'[]'::jsonb),
+COALESCE(cm.url,''),l.difficulty,l.duration_minutes,COALESCE(p.completed,false),COALESCE(p.progress_percent,0)
+FROM lessons l JOIN lesson_categories c ON c.id=l.category_id LEFT JOIN media_assets cm ON cm.id=l.cover_media_id LEFT JOIN user_lesson_progress p ON p.lesson_id=l.id AND p.user_id=$1::uuid`
+
 func (s *Service) Complete(ctx context.Context, userID, lessonID string) (Completion, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

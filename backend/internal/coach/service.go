@@ -663,7 +663,9 @@ func (s *Service) ListMedia(ctx context.Context, user string, role Role) ([]Medi
 	return out, rows.Err()
 }
 func (s *Service) CreateExternalMedia(ctx context.Context, user string, in MediaInput) (Media, error) {
-	if (in.Type != "image" && in.Type != "video") || !strings.HasPrefix(in.URL, "https://") || !validMime(in.Type, in.MIMEType) || in.SizeBytes < 0 {
+	isHTTPS := strings.HasPrefix(in.URL, "https://")
+	isLocalImage := in.Type == "image" && strings.HasPrefix(in.URL, "data:"+in.MIMEType+";base64,") && in.SizeBytes <= 10<<20
+	if (in.Type != "image" && in.Type != "video") || (!isHTTPS && !isLocalImage) || !validMime(in.Type, in.MIMEType) || in.SizeBytes < 0 {
 		return Media{}, ErrInvalid
 	}
 	key := fmt.Sprintf("external/%s/%d", user, time.Now().UnixNano())
