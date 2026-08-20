@@ -26,14 +26,15 @@ type Exercise struct {
 	Rest           int32  `json:"rest_seconds"`
 }
 type Workout struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Minutes     int32      `json:"estimated_minutes"`
-	Difficulty  string     `json:"difficulty"`
-	ProgramID   string     `json:"program_id"`
-	ProgramName string     `json:"program_name"`
-	Exercises   []Exercise `json:"exercises"`
+	ID            string     `json:"id"`
+	Title         string     `json:"title"`
+	Description   string     `json:"description"`
+	Minutes       int32      `json:"estimated_minutes"`
+	Difficulty    string     `json:"difficulty"`
+	ProgramID     string     `json:"program_id"`
+	ProgramName   string     `json:"program_name"`
+	CoverMediaURL string     `json:"cover_media_url,omitempty"`
+	Exercises     []Exercise `json:"exercises"`
 }
 type CatalogItem struct {
 	ID              string  `json:"id"`
@@ -83,7 +84,7 @@ type Service struct{ pool *pgxpool.Pool }
 func NewService(p *pgxpool.Pool) *Service { return &Service{p} }
 func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	var w Workout
-	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,p.difficulty,p.id::text,p.name FROM workouts w JOIN programs p ON p.id=w.program_id WHERE w.id=$1::uuid AND p.published AND w.status='published'`, id).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName)
+	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,p.difficulty,p.id::text,p.name,COALESCE(m.url,'') FROM workouts w JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id WHERE w.id=$1::uuid AND p.published AND w.status='published'`, id).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName, &w.CoverMediaURL)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return w, ErrNotFound
 	}

@@ -27,3 +27,12 @@ func TestRoles(t *testing.T) {
 		t.Fatal("role hierarchy invalid")
 	}
 }
+
+func TestWorkoutExercisesRejectDuplicates(t *testing.T) {
+	id := "10000000-0000-0000-0000-000000000001"
+	reps := 10
+	items := []BuilderExercise{{ExerciseID: id, Sets: 3, TargetReps: &reps, RestSeconds: 60, SortOrder: 0}, {ExerciseID: id, Sets: 2, TargetReps: &reps, RestSeconds: 30, SortOrder: 1}}
+	if validExercises(items) {
+		t.Fatal("duplicate exercise must be rejected before database insert")
+	}
+}

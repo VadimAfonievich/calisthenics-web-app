@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	ErrForbidden = errors.New("coach content forbidden")
-	ErrNotFound  = errors.New("coach content not found")
-	ErrInvalid   = errors.New("coach content invalid")
-	ErrInUse     = errors.New("media in use")
+	ErrForbidden       = errors.New("coach content forbidden")
+	ErrNotFound        = errors.New("coach content not found")
+	ErrInvalid         = errors.New("coach content invalid")
+	ErrInUse           = errors.New("media in use")
+	ErrWorkoutDayInUse = errors.New("workout day is already in use")
 )
 
 type Role string
@@ -399,11 +400,13 @@ func (s *Service) SaveLesson(ctx context.Context, user string, role Role, id *st
 }
 func validExercises(items []BuilderExercise) bool {
 	seen := map[int]bool{}
+	exercises := map[string]bool{}
 	for _, x := range items {
-		if x.Sets < 1 || x.RestSeconds < 0 || x.SortOrder < 0 || seen[x.SortOrder] || (x.TargetReps == nil) == (x.TargetDurationSeconds == nil) {
+		if x.ExerciseID == "" || exercises[x.ExerciseID] || x.Sets < 1 || x.RestSeconds < 0 || x.SortOrder < 0 || seen[x.SortOrder] || (x.TargetReps == nil) == (x.TargetDurationSeconds == nil) {
 			return false
 		}
 		seen[x.SortOrder] = true
+		exercises[x.ExerciseID] = true
 		if x.TargetReps != nil && *x.TargetReps < 1 {
 			return false
 		}
@@ -450,17 +453,28 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			e = tx.QueryRow(ctx, `UPDATE programs SET name=$4,slug=$5,description=$6,difficulty=$7,duration_weeks=$8,category=$9,cover_media_id=$10::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Difficulty, in.DurationWeeks, in.Category, in.CoverMediaID).Scan(&out)
 		}
 		if e == nil && len(in.Levels) > 0 {
-			_, e = tx.Exec(ctx, `DELETE FROM program_levels WHERE program_id=$1::uuid`, out)
+			levelNumbers := make([]int32, 0, len(in.Levels))
 			for _, l := range in.Levels {
 				if e != nil {
 					break
 				}
-				_, e = tx.Exec(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8)`, out, l.LevelNumber, l.Title, l.Description, l.Difficulty, l.UnlockRuleType, l.UnlockRuleValue, l.SortOrder)
+				levelNumbers = append(levelNumbers, int32(l.LevelNumber))
+				_, e = tx.Exec(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(program_id,level_number) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,difficulty=EXCLUDED.difficulty,unlock_rule_type=EXCLUDED.unlock_rule_type,unlock_rule_value=EXCLUDED.unlock_rule_value,sort_order=EXCLUDED.sort_order`, out, l.LevelNumber, l.Title, l.Description, l.Difficulty, l.UnlockRuleType, l.UnlockRuleValue, l.SortOrder)
+			}
+			if e == nil {
+				_, e = tx.Exec(ctx, `DELETE FROM program_levels WHERE program_id=$1::uuid AND NOT(level_number=ANY($2::int[]))`, out, levelNumbers)
 			}
 		}
 	case "workouts":
 		if in.Title == "" || in.EstimatedMinutes < 1 || in.ProgramID == "" || !validExercises(in.Exercises) {
 			return "", ErrInvalid
+		}
+		var dayExists bool
+		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workouts WHERE program_id=$1::uuid AND day_number=$2 AND ($3::uuid IS NULL OR id<>$3::uuid))`, in.ProgramID, in.DayNumber, id).Scan(&dayExists); e != nil {
+			return "", e
+		}
+		if dayExists {
+			return "", ErrWorkoutDayInUse
 		}
 		if id == nil {
 			e = tx.QueryRow(ctx, `INSERT INTO workouts(program_id,program_level_id,day_number,title,description,estimated_minutes,owner_user_id,status,cover_media_id) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,'draft',$8::uuid) RETURNING id::text`, in.ProgramID, in.ProgramLevelID, in.DayNumber, in.Title, in.Description, in.EstimatedMinutes, user, in.CoverMediaID).Scan(&out)
@@ -490,14 +504,16 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, `DELETE FROM skill_requirements WHERE skill_id=$1::uuid`, out)
-			if e == nil {
-				_, e = tx.Exec(ctx, `DELETE FROM skill_levels WHERE skill_id=$1::uuid`, out)
-			}
+			levelNumbers := make([]int32, 0, len(in.Levels))
 			for _, l := range in.Levels {
 				if e != nil {
 					break
 				}
-				_, e = tx.Exec(ctx, `INSERT INTO skill_levels(skill_id,level_number,name,description,program_level_id,criterion_type,criterion_value,sort_order) VALUES($1::uuid,$2,$3,$4,$5::uuid,$6,$7,$8)`, out, l.LevelNumber, l.Title, l.Description, l.ProgramLevelID, l.CriterionType, l.CriterionValue, l.SortOrder)
+				levelNumbers = append(levelNumbers, int32(l.LevelNumber))
+				_, e = tx.Exec(ctx, `INSERT INTO skill_levels(skill_id,level_number,name,description,program_level_id,criterion_type,criterion_value,sort_order) VALUES($1::uuid,$2,$3,$4,$5::uuid,$6,$7,$8) ON CONFLICT(skill_id,level_number) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,program_level_id=EXCLUDED.program_level_id,criterion_type=EXCLUDED.criterion_type,criterion_value=EXCLUDED.criterion_value,sort_order=EXCLUDED.sort_order`, out, l.LevelNumber, l.Title, l.Description, l.ProgramLevelID, l.CriterionType, l.CriterionValue, l.SortOrder)
+			}
+			if e == nil {
+				_, e = tx.Exec(ctx, `DELETE FROM skill_levels WHERE skill_id=$1::uuid AND NOT(level_number=ANY($2::int[]))`, out, levelNumbers)
 			}
 			for _, req := range in.Requirements {
 				if req == out {

@@ -1,7 +1,7 @@
 import {api} from './client'
 import {requireEntityID} from './entityIds'
 export type SkillStatus='locked'|'available'|'in_progress'|'mastered'
-export type Skill={id:string;code:string;name:string;description:string;category:string;difficulty:string;icon:string;xp_reward:number;final_criterion_type:string;final_criterion_value:number;status:SkillStatus;current_level:number;total_levels:number;progress_percent:number}
+export type Skill={id:string;code:string;name:string;description:string;category:string;difficulty:string;icon:string;xp_reward:number;final_criterion_type:string;final_criterion_value:number;cover_media_url?:string;status:SkillStatus;current_level:number;total_levels:number;progress_percent:number}
 export type SkillRequirement={skill_id:string;required_skill_id:string;requirement_type:string;requirement_value:number}
 export type SkillLevel={id:string;level_number:number;name:string;description:string;criterion_type:string;criterion_value:number;status:'locked'|'available'|'in_progress'|'completed';progress_value:number;workouts:Array<{id:string;title:string;estimated_minutes:number}>}
 export const listSkills=(token:string)=>api<{skills:Skill[]}>('/skills',{},token)

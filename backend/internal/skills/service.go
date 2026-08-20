@@ -29,6 +29,7 @@ type Skill struct {
 	CurrentLevel        int32  `json:"current_level"`
 	TotalLevels         int32  `json:"total_levels"`
 	ProgressPercent     int32  `json:"progress_percent"`
+	CoverMediaURL       string `json:"cover_media_url,omitempty"`
 }
 type Workout struct {
 	ID               string `json:"id"`
@@ -72,15 +73,15 @@ type Service struct{ pool *pgxpool.Pool }
 
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool} }
 
-const listSQL = `SELECT s.id::text,s.code,s.name,s.description,s.category,s.difficulty,s.icon,s.xp_reward,s.final_criterion_type,s.final_criterion_value,
+const listSQL = `SELECT s.id::text,s.code,s.name,s.description,s.category,s.difficulty,s.icon,s.xp_reward,s.final_criterion_type,s.final_criterion_value,COALESCE(m.url,''),
 CASE WHEN usp.status IS NOT NULL THEN usp.status WHEN EXISTS(SELECT 1 FROM skill_requirements r LEFT JOIN user_skill_progress required ON required.user_id=$1::uuid AND required.skill_id=r.required_skill_id WHERE r.skill_id=s.id AND (required.status IS DISTINCT FROM 'mastered' OR (r.requirement_type='skill_level' AND required.current_level<r.requirement_value))) THEN 'locked' ELSE 'available' END,
 COALESCE(usp.current_level,1),COUNT(sl.id)::int,COALESCE(COUNT(ul.skill_level_id) FILTER(WHERE ul.status='completed'),0)::int
-FROM skills s LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' GROUP BY s.id,usp.status,usp.current_level ORDER BY s.sort_order,s.name`
+FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY s.sort_order,s.name`
 
 func scanSkill(rows pgx.Rows) (Skill, error) {
 	var x Skill
 	var completed int32
-	err := rows.Scan(&x.ID, &x.Code, &x.Name, &x.Description, &x.Category, &x.Difficulty, &x.Icon, &x.XPReward, &x.FinalCriterionType, &x.FinalCriterionValue, &x.Status, &x.CurrentLevel, &x.TotalLevels, &completed)
+	err := rows.Scan(&x.ID, &x.Code, &x.Name, &x.Description, &x.Category, &x.Difficulty, &x.Icon, &x.XPReward, &x.FinalCriterionType, &x.FinalCriterionValue, &x.CoverMediaURL, &x.Status, &x.CurrentLevel, &x.TotalLevels, &completed)
 	if x.TotalLevels > 0 {
 		x.ProgressPercent = completed * 100 / x.TotalLevels
 	}

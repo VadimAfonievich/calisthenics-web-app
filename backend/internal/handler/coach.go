@@ -59,6 +59,8 @@ func coachErr(w http.ResponseWriter, e error) {
 		writeError(w, 404, "CONTENT_NOT_FOUND", "Content not found")
 	case errors.Is(e, coachsvc.ErrInUse):
 		writeError(w, 409, "MEDIA_IN_USE", "Media is referenced by content")
+	case errors.Is(e, coachsvc.ErrWorkoutDayInUse):
+		writeError(w, 409, "WORKOUT_DAY_IN_USE", "В выбранной программе уже есть тренировка с таким номером дня")
 	case errors.Is(e, coachsvc.ErrInvalid):
 		writeError(w, 400, "INVALID_INPUT", "Content validation failed")
 	default:
