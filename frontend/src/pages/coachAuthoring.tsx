@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   action,
+  coachMe,
   coachOptions,
   content,
   contentDetail,
@@ -93,6 +94,12 @@ export function CoachContentHome() {
       ).flat(),
     }),
   });
+  const role = useQuery({
+    queryKey: ["coach-role"],
+    queryFn: () => coachMe(token()),
+  });
+  const manageAll =
+    role.data?.role === "admin" || role.data?.role === "super_admin";
   const items =
     q.data?.items.filter((x) => filter === "all" || x.kind === filter) ?? [];
   return (
@@ -142,7 +149,12 @@ export function CoachContentHome() {
           <div className="notice skeleton">Загружаем материалы…</div>
         )}
         {items.map((x) => (
-          <ContentCard key={`${x.kind}-${x.id}`} item={x} kind={x.kind} />
+          <ContentCard
+            key={`${x.kind}-${x.id}`}
+            item={x}
+            kind={x.kind}
+            manageAll={manageAll}
+          />
         ))}
         {!q.isLoading && !items.length && (
           <div className="empty-state compact">
@@ -177,10 +189,18 @@ function CreateSheet({ close }: { close: () => void }) {
 }
 export function CoachContentList() {
   const { kind = "lessons" } = useParams();
+  const [search, setSearch] = useState(""),
+    [status, setStatus] = useState("");
+  const role = useQuery({
+    queryKey: ["coach-role"],
+    queryFn: () => coachMe(token()),
+  });
+  const manageAll =
+    role.data?.role === "admin" || role.data?.role === "super_admin";
   const k = kinds.find((x) => x.key === kind) ?? kinds[0],
     q = useQuery({
-      queryKey: ["coach-content", kind],
-      queryFn: () => content(token(), kind),
+      queryKey: ["coach-content", kind, search, status],
+      queryFn: () => content(token(), kind, search, status),
     });
   return (
     <div className="stack">
@@ -193,8 +213,27 @@ export function CoachContentList() {
           + Создать
         </Link>
       </div>
+      <div className="coach-filters">
+        <input
+          placeholder={`Поиск: ${k.many.toLowerCase()}`}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Все статусы</option>
+          <option value="draft">Черновики</option>
+          <option value="published">Опубликованные</option>
+          <option value="archived">Архив</option>
+        </select>
+      </div>
+      {q.isLoading && (
+        <div className="notice skeleton">Загружаем материалы…</div>
+      )}
+      {q.isError && (
+        <div className="notice error">Не удалось загрузить материалы.</div>
+      )}
       {q.data?.items.map((x) => (
-        <ContentCard item={x} kind={k.key} key={x.id} />
+        <ContentCard item={x} kind={k.key} key={x.id} manageAll={manageAll} />
       ))}
       {!q.isLoading && !q.data?.items.length && (
         <div className="empty-state compact">
@@ -208,10 +247,19 @@ export function CoachContentList() {
     </div>
   );
 }
-function ContentCard({ item, kind }: { item: ContentItem; kind: ContentKind }) {
+function ContentCard({
+  item,
+  kind,
+  manageAll = false,
+}: {
+  item: ContentItem;
+  kind: ContentKind;
+  manageAll?: boolean;
+}) {
   const nav = useNavigate(),
     qc = useQueryClient(),
     system = !item.owner_user_id,
+    readOnly = system && !manageAll,
     act = useMutation({
       mutationFn: (
         name: "publish" | "unpublish" | "archive" | "restore" | "duplicate",
@@ -222,10 +270,10 @@ function ContentCard({ item, kind }: { item: ContentItem; kind: ContentKind }) {
       },
     });
   const edit = () => {
-    if (!system) nav(`/coach/${kind}/${item.id}/edit`);
+    if (!readOnly) nav(`/coach/${kind}/${item.id}/edit`);
   };
   return (
-    <article className={`card content-card ${system ? "read-only" : ""}`}>
+    <article className={`card content-card ${readOnly ? "read-only" : ""}`}>
       <button className="content-card-main" onClick={edit}>
         <span>
           <small>
@@ -238,10 +286,10 @@ function ContentCard({ item, kind }: { item: ContentItem; kind: ContentKind }) {
             {statusLabel[item.status]}
           </p>
         </span>
-        <b>{system ? "Только чтение" : "Редактировать ›"}</b>
+        <b>{readOnly ? "Только чтение" : "Редактировать ›"}</b>
       </button>
       <div className="coach-actions">
-        {system ? (
+        {readOnly ? (
           <button onClick={() => act.mutate("duplicate")}>
             Создать свою копию
           </button>

@@ -331,7 +331,7 @@ func (s *Service) List(ctx context.Context, kind, user string, role Role, search
 	args := []any{}
 	if !role.CanManageAll() {
 		args = append(args, user)
-		where += fmt.Sprintf(" AND owner_user_id=$%d::uuid", len(args))
+		where += fmt.Sprintf(" AND (owner_user_id=$%d::uuid OR owner_user_id IS NULL)", len(args))
 	}
 	if search != "" {
 		args = append(args, "%"+search+"%")
