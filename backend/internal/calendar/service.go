@@ -132,7 +132,7 @@ func (s *Service) CreateSchedule(ctx context.Context, user string, in ScheduleIn
 	if in.Active != nil {
 		active = *in.Active
 	}
-	e = tx.QueryRow(ctx, `INSERT INTO user_training_schedules(user_id,workout_id,preferred_time,timezone,active,start_date,end_date) SELECT $1::uuid,w.id,$3::time,$4,$5,$6::date,$7::date FROM workouts w JOIN programs p ON p.id=w.program_id WHERE w.id=$2::uuid AND p.published RETURNING id::text,workout_id::text,to_char(preferred_time,'HH24:MI'),timezone,start_date::text,end_date::text,active`, user, in.WorkoutID, in.PreferredTime, tz, active, in.StartDate, in.EndDate).Scan(&out.ID, &out.WorkoutID, &out.PreferredTime, &out.Timezone, &out.StartDate, &out.EndDate, &out.Active)
+	e = tx.QueryRow(ctx, `INSERT INTO user_training_schedules(user_id,workout_id,preferred_time,timezone,active,start_date,end_date) SELECT $1::uuid,w.id,$3::time,$4,$5,$6::date,$7::date FROM workouts w WHERE w.id=$2::uuid AND w.status='published' RETURNING id::text,workout_id::text,to_char(preferred_time,'HH24:MI'),timezone,start_date::text,end_date::text,active`, user, in.WorkoutID, in.PreferredTime, tz, active, in.StartDate, in.EndDate).Scan(&out.ID, &out.WorkoutID, &out.PreferredTime, &out.Timezone, &out.StartDate, &out.EndDate, &out.Active)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return out, ErrNotFound
 	}

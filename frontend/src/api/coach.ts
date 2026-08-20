@@ -6,6 +6,7 @@ export type Dashboard = {
   lessons_published: number;
   exercises: number;
   workouts: number;
+  workouts_published: number;
   programs: number;
   skills: number;
   media: number;

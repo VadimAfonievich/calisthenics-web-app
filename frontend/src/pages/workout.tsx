@@ -1,23 +1,644 @@
-import {useEffect,useMemo,useRef,useState} from 'react'
-import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
-import {Link,useNavigate,useParams,useSearchParams} from 'react-router-dom'
-import {complete,getSession,getWorkout,listWorkouts,saveSet,start,type CompletedSet,type Workout,type WorkoutCatalogItem,type WorkoutExercise,type WorkoutSession} from '../api/workouts'
-import {createPlanned} from '../api/calendar'
-import {isValidEntityID,workoutRoute} from '../api/entityIds'
-import {actualTimedSetSeconds,addRestSeconds,completedCount,elapsedSeconds,exerciseTarget,formatClock,nextSet,progressPercent,totalSets,workoutSummary} from '../workoutFlow'
-import {useSessionStore} from '../store/session'
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  complete,
+  getSession,
+  getWorkout,
+  listWorkouts,
+  saveSet,
+  start,
+  type CompletedSet,
+  type Workout,
+  type WorkoutCatalogItem,
+  type WorkoutExercise,
+  type WorkoutSession,
+} from "../api/workouts";
+import { createPlanned } from "../api/calendar";
+import { isValidEntityID, workoutRoute } from "../api/entityIds";
+import {
+  actualTimedSetSeconds,
+  addRestSeconds,
+  completedCount,
+  elapsedSeconds,
+  exerciseTarget,
+  formatClock,
+  nextSet,
+  progressPercent,
+  totalSets,
+  workoutSummary,
+} from "../workoutFlow";
+import { useSessionStore } from "../store/session";
 
-const Notice=()=> <div className="empty-state"><h2>Тренировки доступны в Telegram</h2></div>
-const categoryLabels:Record<string,string>={MORNING_ROUTINE:'Утренние зарядки',WARMUP:'Разминка',BASE_STRENGTH:'Базовая сила',SKILL:'Навыки',MOBILITY:'Мобилити',OTHER:'Другие тренировки'}
+const Notice = () => (
+  <div className="empty-state">
+    <h2>Тренировки доступны в Telegram</h2>
+  </div>
+);
+const categoryLabels: Record<string, string> = {
+  MORNING_ROUTINE: "Утренние зарядки",
+  WARMUP: "Разминка",
+  BASE_STRENGTH: "Базовая сила",
+  SKILL: "Навыки",
+  MOBILITY: "Мобилити",
+  OTHER: "Другие тренировки",
+};
 
-export function WorkoutCatalogPage(){const token=useSessionStore(s=>s.accessToken);const query=useQuery({queryKey:['workouts'],queryFn:()=>listWorkouts(token!),enabled:!!token});if(!token)return <Notice/>;if(query.isLoading)return <div className="notice skeleton">Загружаем тренировки…</div>;if(query.isError)return <div className="notice error">Не удалось загрузить каталог тренировок.</div>;const grouped=(query.data?.workouts??[]).reduce<Record<string,WorkoutCatalogItem[]>>((out,w)=>{(out[w.category||'OTHER']??=[]).push(w);return out},{});return <div className="stack"><div><p className="eyebrow">ПРОГРАММЫ</p><h2>Тренировки</h2></div>{Object.entries(grouped).map(([category,items])=><section className="stack workout-category" key={category}><h3>{categoryLabels[category]??categoryLabels.OTHER}</h3>{items.map(w=>{const route=w.status==='started'&&isValidEntityID(w.active_session_id)?`/workout-session/${w.active_session_id}`:workoutRoute(w.id);return route?<Link className="workout-card" to={route} key={w.id}><div><p className="eyebrow">{w.program_name} · {w.difficulty}</p><h3>{w.title}</h3><p>{w.description}</p></div><footer><span>{w.estimated_minutes} мин</span><span>{w.exercise_count} упр.</span>{w.status&&<b>{w.status==='started'?'Продолжить':w.status}</b>}</footer></Link>:<div className="notice error" key={w.title}>Тренировка «{w.title}» недоступна.</div>})}</section>)}</div>}
+export function WorkoutCatalogPage() {
+  const token = useSessionStore((s) => s.accessToken);
+  const query = useQuery({
+    queryKey: ["workouts"],
+    queryFn: () => listWorkouts(token!),
+    enabled: !!token,
+  });
+  if (!token) return <Notice />;
+  if (query.isLoading)
+    return <div className="notice skeleton">Загружаем тренировки…</div>;
+  if (query.isError)
+    return (
+      <div className="notice error">
+        Не удалось загрузить каталог тренировок.
+      </div>
+    );
+  const grouped = (query.data?.workouts ?? []).reduce<
+    Record<string, WorkoutCatalogItem[]>
+  >((out, w) => {
+    (out[w.category || "OTHER"] ??= []).push(w);
+    return out;
+  }, {});
+  return (
+    <div className="stack">
+      <div>
+        <p className="eyebrow">ПРОГРАММЫ</p>
+        <h2>Тренировки</h2>
+      </div>
+      {!Object.keys(grouped).length && <div className="empty-state compact"><h3>Опубликованных тренировок пока нет</h3><p>Сохранённые черновики появятся здесь после публикации тренером.</p></div>}
+      {Object.entries(grouped).map(([category, items]) => (
+        <section className="stack workout-category" key={category}>
+          <h3>{categoryLabels[category] ?? categoryLabels.OTHER}</h3>
+          {items.map((w) => {
+            const route =
+              w.status === "started" && isValidEntityID(w.active_session_id)
+                ? `/workout-session/${w.active_session_id}`
+                : workoutRoute(w.id);
+            return route ? (
+              <Link className="workout-card" to={route} key={w.id}>
+                <div>
+                  <p className="eyebrow">
+                    {w.program_name} · {w.difficulty}
+                  </p>
+                  <h3>{w.title}</h3>
+                  <p>{w.description}</p>
+                </div>
+                <footer>
+                  <span>{w.estimated_minutes} мин</span>
+                  <span>{w.exercise_count} упр.</span>
+                  {w.status && (
+                    <b>{w.status === "started" ? "Продолжить" : w.status}</b>
+                  )}
+                </footer>
+              </Link>
+            ) : (
+              <div className="notice error" key={w.title}>
+                Тренировка «{w.title}» недоступна.
+              </div>
+            );
+          })}
+        </section>
+      ))}
+    </div>
+  );
+}
 
-export function WorkoutPreviewPage(){const{id=''}=useParams(),token=useSessionStore(s=>s.accessToken),navigate=useNavigate(),[params]=useSearchParams(),valid=isValidEntityID(id);const query=useQuery({queryKey:['workout',id],queryFn:()=>getWorkout(token!,id),enabled:!!token&&valid});const begin=useMutation({mutationFn:async()=>{let planned=params.get('planned_workout_id')??undefined;const date=params.get('scheduled_date'),schedule=params.get('schedule_id')??undefined;if(!planned&&date){const result=await createPlanned(token!,{workout_id:id,scheduled_date:date,scheduled_time:params.get('scheduled_time')??undefined,source_schedule_id:schedule});planned=result.planned_workout.id}return start(token!,id,planned)},onSuccess:r=>navigate(`/workout-session/${r.session.id}`)});if(!token)return <Notice/>;if(!valid)return <div className="notice error">Некорректный идентификатор тренировки.</div>;if(query.isLoading)return <div className="notice skeleton">Загружаем план…</div>;if(query.isError||!query.data)return <div className="notice error">Тренировка не найдена.</div>;const w=query.data.workout;return <div className="stack workout-preview"><Link className="text-link" to="/workouts">← Все тренировки</Link>{w.cover_media_url&&<img className="lesson-cover" src={w.cover_media_url} alt=""/>}<section className="hero-card"><p className="eyebrow">{w.program_name} · {w.difficulty}</p><h2>{w.title}</h2><span>{w.description}</span><div className="workout-meta"><b>{w.estimated_minutes} мин</b><b>{w.exercises.length} упражнений</b></div></section><Link className="text-link" to={`/calendar?workout=${w.id}`}>Добавить в расписание →</Link><section className="stack"><h3>План тренировки</h3>{w.exercises.map((x,i)=><article className="plan-row" key={x.id}><i>{i+1}</i><div><h3>{x.name}</h3><p>{exerciseTarget(x)} · Отдых {x.rest_seconds} сек</p></div></article>)}</section><button className="primary-button workout-cta" disabled={begin.isPending} onClick={()=>begin.mutate()}>{begin.isPending?'Начинаем…':'Начать тренировку'}</button>{begin.isError&&<p className="notice error">{begin.error instanceof Error?begin.error.message:'Не удалось начать тренировку.'}</p>}</div>}
+export function WorkoutPreviewPage() {
+  const { id = "" } = useParams(),
+    token = useSessionStore((s) => s.accessToken),
+    navigate = useNavigate(),
+    [params] = useSearchParams(),
+    valid = isValidEntityID(id);
+  const query = useQuery({
+    queryKey: ["workout", id],
+    queryFn: () => getWorkout(token!, id),
+    enabled: !!token && valid,
+  });
+  const begin = useMutation({
+    mutationFn: async () => {
+      let planned = params.get("planned_workout_id") ?? undefined;
+      const date = params.get("scheduled_date"),
+        schedule = params.get("schedule_id") ?? undefined;
+      if (!planned && date) {
+        const result = await createPlanned(token!, {
+          workout_id: id,
+          scheduled_date: date,
+          scheduled_time: params.get("scheduled_time") ?? undefined,
+          source_schedule_id: schedule,
+        });
+        planned = result.planned_workout.id;
+      }
+      return start(token!, id, planned);
+    },
+    onSuccess: (r) => navigate(`/workout-session/${r.session.id}`),
+  });
+  if (!token) return <Notice />;
+  if (!valid)
+    return (
+      <div className="notice error">Некорректный идентификатор тренировки.</div>
+    );
+  if (query.isLoading)
+    return <div className="notice skeleton">Загружаем план…</div>;
+  if (query.isError || !query.data)
+    return <div className="notice error">Тренировка не найдена.</div>;
+  const w = query.data.workout;
+  return (
+    <div className="stack workout-preview">
+      <Link className="text-link" to="/workouts">
+        ← Все тренировки
+      </Link>
+      {w.cover_media_url && (
+        <img className="lesson-cover" src={w.cover_media_url} alt="" />
+      )}
+      <section className="hero-card">
+        <p className="eyebrow">
+          {w.program_name} · {w.difficulty}
+        </p>
+        <h2>{w.title}</h2>
+        <span>{w.description}</span>
+        <div className="workout-meta">
+          <b>{w.estimated_minutes} мин</b>
+          <b>{w.exercises.length} упражнений</b>
+        </div>
+      </section>
+      <Link className="text-link" to={`/calendar?workout=${w.id}`}>
+        Добавить в расписание →
+      </Link>
+      <section className="stack">
+        <h3>План тренировки</h3>
+        {w.exercises.map((x, i) => (
+          <article className="plan-row" key={x.id}>
+            <i>{i + 1}</i>
+            <div>
+              <h3>{x.name}</h3>
+              <p>
+                {exerciseTarget(x)} · Отдых {x.rest_seconds} сек
+              </p>
+            </div>
+          </article>
+        ))}
+      </section>
+      <button
+        className="primary-button workout-cta"
+        disabled={begin.isPending}
+        onClick={() => begin.mutate()}
+      >
+        {begin.isPending ? "Начинаем…" : "Начать тренировку"}
+      </button>
+      {begin.isError && (
+        <p className="notice error">
+          {begin.error instanceof Error
+            ? begin.error.message
+            : "Не удалось начать тренировку."}
+        </p>
+      )}
+    </div>
+  );
+}
 
-type Phase='set'|'timer'|'rest'|'done'
-export function WorkoutPlayerPage(){const{id=''}=useParams(),token=useSessionStore(s=>s.accessToken),qc=useQueryClient(),valid=isValidEntityID(id);const query=useQuery({queryKey:['workout-session',id],queryFn:()=>getSession(token!,id),enabled:!!token&&valid,retry:false});const[dataSets,setDataSets]=useState<CompletedSet[]>([]),[phase,setPhase]=useState<Phase>('set'),[now,setNow]=useState(Date.now()),[remaining,setRemaining]=useState(0),[rest,setRest]=useState(0),[actualReps,setActualReps]=useState(0);const timerStarted=useRef(0);useEffect(()=>{const i=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(i)},[]);useEffect(()=>{if(query.data)setDataSets(query.data.completed_sets)},[query.data]);const current=useMemo(()=>query.data?nextSet(query.data.workout,dataSets):null,[query.data,dataSets]);useEffect(()=>{if(current?.exercise.target_reps!==undefined)setActualReps(current.exercise.target_reps)},[current?.exercise.id,current?.setNumber]);useEffect(()=>{if((phase!=='timer'&&phase!=='rest')||remaining<=0)return;const i=setInterval(()=>setRemaining(v=>Math.max(0,v-1)),1000);return()=>clearInterval(i)},[phase,remaining]);useEffect(()=>{if(phase==='timer'&&remaining===0&&timerStarted.current){window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.('success')}if(phase==='rest'&&remaining===0)setPhase('set')},[phase,remaining]);const record=useMutation({mutationFn:(payload:{reps?:number;duration_seconds?:number})=>saveSet(token!,id,{exercise_id:current!.exercise.id,set_number:current!.setNumber,...payload,completed:true}),onSuccess:(_,payload)=>{const item={exercise_id:current!.exercise.id,set_number:current!.setNumber,...payload,completed:true};setDataSets(s=>[...s.filter(x=>!(x.exercise_id===item.exercise_id&&x.set_number===item.set_number)),item]);timerStarted.current=0;const final=completedCount(dataSets)+1>=totalSets(query.data!.workout);if(final)setPhase('done');else if(current!.exercise.rest_seconds>0){setRest(current!.exercise.rest_seconds);setRemaining(current!.exercise.rest_seconds);setPhase('rest')}else setPhase('set')}});const finish=useMutation({mutationFn:()=>complete(token!,id,elapsedSeconds(query.data!.session.started_at)),onSuccess:()=>{qc.invalidateQueries({queryKey:['progress']});qc.invalidateQueries({queryKey:['workouts']})}});if(!token)return <Notice/>;if(!valid)return <div className="notice error">Некорректный идентификатор сессии.</div>;if(query.isLoading)return <div className="notice skeleton">Восстанавливаем тренировку…</div>;if(query.isError||!query.data)return <div className="notice error">Активная тренировка не найдена или принадлежит другому пользователю.</div>;const{workout,session}=query.data,total=totalSets(workout),done=completedCount(dataSets),elapsed=elapsedSeconds(session.started_at,now),summary=workoutSummary(dataSets);if(finish.isSuccess)return <WorkoutComplete title={workout.title} duration={finish.data.session.duration_seconds} exercises={workout.exercises.length} total={total} summary={summary} session={finish.data.session}/>;if(session.status==='completed')return <div className="empty-state"><div className="empty-icon">✓</div><h2>Тренировка уже завершена</h2><Link className="primary-button" to="/workouts">К тренировкам</Link></div>;const early=()=>{if(done===total||window.confirm(done===0?'Нет завершённых подходов. Завершить тренировку?':`Выполнено ${done} из ${total} подходов. Завершить досрочно?`))finish.mutate()};return <div className="workout-player stack"><header><div><p className="eyebrow">АКТИВНАЯ ТРЕНИРОВКА</p><h2>{workout.title}</h2></div><b>{formatClock(elapsed)}</b></header><div className="progress-track"><i style={{width:`${progressPercent(workout,dataSets)}%`}}/></div><div className="workout-stats"><span>Упражнение {(current?.exerciseIndex??workout.exercises.length-1)+1} / {workout.exercises.length}</span><span>Подходы {done} / {total}</span><span>{progressPercent(workout,dataSets)}%</span></div>{phase==='rest'&&current?<RestView seconds={remaining} original={rest} next={current.exercise} exerciseFinished={current.setNumber===1} onSkip={()=>{setRemaining(0);setPhase('set')}} onAdd={()=>setRemaining(addRestSeconds)}/>:phase==='done'||!current?<section className="player-focus"><p className="eyebrow">ПЛАН ВЫПОЛНЕН</p><h2>Все подходы завершены</h2><button className="primary-button" disabled={finish.isPending} onClick={()=>finish.mutate()}>{finish.isPending?'Завершаем…':'Завершить тренировку'}</button></section>:<SetView current={current} phase={phase} remaining={remaining} reps={actualReps} pending={record.isPending} onMinus={()=>setActualReps(v=>Math.max(0,v-1))} onPlus={()=>setActualReps(v=>v+1)} onStart={()=>{timerStarted.current=Date.now();setRemaining(current.exercise.target_duration_seconds??0);setPhase('timer')}} onComplete={()=>record.mutate(current.exercise.target_reps!==undefined?{reps:actualReps}:{duration_seconds:actualTimedSetSeconds(timerStarted.current)})}/>} {(record.isError||finish.isError)&&<p className="notice error">{(record.error??finish.error) instanceof Error?(record.error??finish.error)?.message:'Не удалось сохранить результат.'}</p>}<WorkoutOutline workout={workout} sets={dataSets} currentID={current?.exercise.id}/>{phase!=='done'&&<button className="danger-link" disabled={finish.isPending} onClick={early}>Завершить досрочно</button>}</div>}
+type Phase = "set" | "timer" | "rest" | "done";
+export function WorkoutPlayerPage() {
+  const { id = "" } = useParams(),
+    token = useSessionStore((s) => s.accessToken),
+    qc = useQueryClient(),
+    valid = isValidEntityID(id);
+  const query = useQuery({
+    queryKey: ["workout-session", id],
+    queryFn: () => getSession(token!, id),
+    enabled: !!token && valid,
+    retry: false,
+  });
+  const [dataSets, setDataSets] = useState<CompletedSet[]>([]),
+    [phase, setPhase] = useState<Phase>("set"),
+    [now, setNow] = useState(Date.now()),
+    [remaining, setRemaining] = useState(0),
+    [rest, setRest] = useState(0),
+    [actualReps, setActualReps] = useState(0);
+  const timerStarted = useRef(0);
+  useEffect(() => {
+    const i = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, []);
+  useEffect(() => {
+    if (query.data) setDataSets(query.data.completed_sets);
+  }, [query.data]);
+  const current = useMemo(
+    () => (query.data ? nextSet(query.data.workout, dataSets) : null),
+    [query.data, dataSets],
+  );
+  useEffect(() => {
+    if (current?.exercise.target_reps !== undefined)
+      setActualReps(current.exercise.target_reps);
+  }, [current?.exercise.id, current?.setNumber]);
+  useEffect(() => {
+    if ((phase !== "timer" && phase !== "rest") || remaining <= 0) return;
+    const i = setInterval(() => setRemaining((v) => Math.max(0, v - 1)), 1000);
+    return () => clearInterval(i);
+  }, [phase, remaining]);
+  useEffect(() => {
+    if (phase === "timer" && remaining === 0 && timerStarted.current) {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
+        "success",
+      );
+    }
+    if (phase === "rest" && remaining === 0) setPhase("set");
+  }, [phase, remaining]);
+  const record = useMutation({
+    mutationFn: (payload: { reps?: number; duration_seconds?: number }) =>
+      saveSet(token!, id, {
+        exercise_id: current!.exercise.id,
+        set_number: current!.setNumber,
+        ...payload,
+        completed: true,
+      }),
+    onSuccess: (_, payload) => {
+      const item = {
+        exercise_id: current!.exercise.id,
+        set_number: current!.setNumber,
+        ...payload,
+        completed: true,
+      };
+      setDataSets((s) => [
+        ...s.filter(
+          (x) =>
+            !(
+              x.exercise_id === item.exercise_id &&
+              x.set_number === item.set_number
+            ),
+        ),
+        item,
+      ]);
+      timerStarted.current = 0;
+      const final =
+        completedCount(dataSets) + 1 >= totalSets(query.data!.workout);
+      if (final) setPhase("done");
+      else if (current!.exercise.rest_seconds > 0) {
+        setRest(current!.exercise.rest_seconds);
+        setRemaining(current!.exercise.rest_seconds);
+        setPhase("rest");
+      } else setPhase("set");
+    },
+  });
+  const finish = useMutation({
+    mutationFn: () =>
+      complete(token!, id, elapsedSeconds(query.data!.session.started_at)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["progress"] });
+      qc.invalidateQueries({ queryKey: ["workouts"] });
+    },
+  });
+  if (!token) return <Notice />;
+  if (!valid)
+    return (
+      <div className="notice error">Некорректный идентификатор сессии.</div>
+    );
+  if (query.isLoading)
+    return <div className="notice skeleton">Восстанавливаем тренировку…</div>;
+  if (query.isError || !query.data)
+    return (
+      <div className="notice error">
+        Активная тренировка не найдена или принадлежит другому пользователю.
+      </div>
+    );
+  const { workout, session } = query.data,
+    total = totalSets(workout),
+    done = completedCount(dataSets),
+    elapsed = elapsedSeconds(session.started_at, now),
+    summary = workoutSummary(dataSets);
+  if (finish.isSuccess)
+    return (
+      <WorkoutComplete
+        title={workout.title}
+        duration={finish.data.session.duration_seconds}
+        exercises={workout.exercises.length}
+        total={total}
+        summary={summary}
+        session={finish.data.session}
+      />
+    );
+  if (session.status === "completed")
+    return (
+      <div className="empty-state">
+        <div className="empty-icon">✓</div>
+        <h2>Тренировка уже завершена</h2>
+        <Link className="primary-button" to="/workouts">
+          К тренировкам
+        </Link>
+      </div>
+    );
+  const early = () => {
+    if (
+      done === total ||
+      window.confirm(
+        done === 0
+          ? "Нет завершённых подходов. Завершить тренировку?"
+          : `Выполнено ${done} из ${total} подходов. Завершить досрочно?`,
+      )
+    )
+      finish.mutate();
+  };
+  return (
+    <div className="workout-player stack">
+      <header>
+        <div>
+          <p className="eyebrow">АКТИВНАЯ ТРЕНИРОВКА</p>
+          <h2>{workout.title}</h2>
+        </div>
+        <b>{formatClock(elapsed)}</b>
+      </header>
+      <div className="progress-track">
+        <i style={{ width: `${progressPercent(workout, dataSets)}%` }} />
+      </div>
+      <div className="workout-stats">
+        <span>
+          Упражнение{" "}
+          {(current?.exerciseIndex ?? workout.exercises.length - 1) + 1} /{" "}
+          {workout.exercises.length}
+        </span>
+        <span>
+          Подходы {done} / {total}
+        </span>
+        <span>{progressPercent(workout, dataSets)}%</span>
+      </div>
+      {phase === "rest" && current ? (
+        <RestView
+          seconds={remaining}
+          original={rest}
+          next={current.exercise}
+          exerciseFinished={current.setNumber === 1}
+          onSkip={() => {
+            setRemaining(0);
+            setPhase("set");
+          }}
+          onAdd={() => setRemaining(addRestSeconds)}
+        />
+      ) : phase === "done" || !current ? (
+        <section className="player-focus">
+          <p className="eyebrow">ПЛАН ВЫПОЛНЕН</p>
+          <h2>Все подходы завершены</h2>
+          <button
+            className="primary-button"
+            disabled={finish.isPending}
+            onClick={() => finish.mutate()}
+          >
+            {finish.isPending ? "Завершаем…" : "Завершить тренировку"}
+          </button>
+        </section>
+      ) : (
+        <SetView
+          current={current}
+          phase={phase}
+          remaining={remaining}
+          reps={actualReps}
+          pending={record.isPending}
+          onMinus={() => setActualReps((v) => Math.max(0, v - 1))}
+          onPlus={() => setActualReps((v) => v + 1)}
+          onStart={() => {
+            timerStarted.current = Date.now();
+            setRemaining(current.exercise.target_duration_seconds ?? 0);
+            setPhase("timer");
+          }}
+          onComplete={() =>
+            record.mutate(
+              current.exercise.target_reps !== undefined
+                ? { reps: actualReps }
+                : {
+                    duration_seconds: actualTimedSetSeconds(
+                      timerStarted.current,
+                    ),
+                  },
+            )
+          }
+        />
+      )}{" "}
+      {(record.isError || finish.isError) && (
+        <p className="notice error">
+          {(record.error ?? finish.error) instanceof Error
+            ? (record.error ?? finish.error)?.message
+            : "Не удалось сохранить результат."}
+        </p>
+      )}
+      <WorkoutOutline
+        workout={workout}
+        sets={dataSets}
+        currentID={current?.exercise.id}
+      />
+      {phase !== "done" && (
+        <button
+          className="danger-link"
+          disabled={finish.isPending}
+          onClick={early}
+        >
+          Завершить досрочно
+        </button>
+      )}
+    </div>
+  );
+}
 
-function SetView({current,phase,remaining,reps,pending,onMinus,onPlus,onStart,onComplete}:{current:{exercise:WorkoutExercise;exerciseIndex:number;setNumber:number};phase:Phase;remaining:number;reps:number;pending:boolean;onMinus:()=>void;onPlus:()=>void;onStart:()=>void;onComplete:()=>void}){const x=current.exercise;return <section className="player-focus"><p className="eyebrow">УПРАЖНЕНИЕ {current.exerciseIndex+1}</p><h2>{x.name}</h2><p>Подход {current.setNumber} из {x.sets}</p>{x.target_reps!==undefined?<><span>Цель: {x.target_reps} повторений</span><div className="rep-control"><button onClick={onMinus} disabled={pending}>−</button><b>{reps}</b><button onClick={onPlus} disabled={pending}>+</button></div><button className="primary-button" disabled={pending} onClick={onComplete}>{pending?'Сохраняем…':'Завершить подход'}</button></>:<><span>Цель: {x.target_duration_seconds} секунд</span>{phase==='timer'&&<strong className="countdown">{formatClock(remaining)}</strong>}{phase==='timer'?<button className="primary-button" disabled={pending} onClick={onComplete}>{pending?'Сохраняем…':remaining===0?'Завершить подход':'Завершить раньше'}</button>:<button className="primary-button" onClick={onStart}>Начать подход</button>}</>}</section>}
-function RestView({seconds,next,exerciseFinished,onSkip,onAdd}:{seconds:number;original:number;next:WorkoutExercise;exerciseFinished:boolean;onSkip:()=>void;onAdd:()=>void}){return <section className="player-focus rest"><p className="eyebrow">{exerciseFinished?'УПРАЖНЕНИЕ ЗАВЕРШЕНО':'ОТДЫХ'}</p><strong className="countdown">{formatClock(seconds)}</strong><p>Следующий: {next.name}</p><div className="action-row"><button onClick={onSkip}>Пропустить отдых</button><button onClick={onAdd}>+15 сек</button></div></section>}
-function WorkoutOutline({workout,sets,currentID}:{workout:Workout;sets:CompletedSet[];currentID?:string}){return <details className="card workout-outline"><summary>План тренировки</summary>{workout.exercises.map(x=>{const done=sets.filter(s=>s.exercise_id===x.id&&s.completed).length;return <p key={x.id}><b>{done===x.sets?'✓':x.id===currentID?'●':'○'}</b> {x.name} <span>{done}/{x.sets}</span></p>})}</details>}
-function WorkoutComplete({title,duration,exercises,total,summary,session}:{title:string;duration:number;exercises:number;total:number;summary:ReturnType<typeof workoutSummary>;session:WorkoutSession}){const partial=summary.completed_sets<total;return <div className="empty-state workout-summary"><div className="empty-icon">✓</div><h2>{partial?'Тренировка завершена досрочно':'Тренировка завершена'}</h2><p>{title}</p><div className="summary-grid"><span><b>{formatClock(duration)}</b>Время</span><span><b>{exercises}</b>Упражнений</span><span><b>{summary.completed_sets}/{total}</b>Подходов</span><span><b>{summary.reps}</b>Повторений</span><span><b>{summary.timed_seconds}</b>Секунд</span><span><b>+{session.xp_earned}</b>XP</span></div><p>🔥 Серия: {session.current_streak} дней</p>{session.unlocked_achievements.map(x=><span key={x}>🏆 {x}</span>)}<Link className="primary-button" to="/workouts">К тренировкам</Link></div>}
+function SetView({
+  current,
+  phase,
+  remaining,
+  reps,
+  pending,
+  onMinus,
+  onPlus,
+  onStart,
+  onComplete,
+}: {
+  current: {
+    exercise: WorkoutExercise;
+    exerciseIndex: number;
+    setNumber: number;
+  };
+  phase: Phase;
+  remaining: number;
+  reps: number;
+  pending: boolean;
+  onMinus: () => void;
+  onPlus: () => void;
+  onStart: () => void;
+  onComplete: () => void;
+}) {
+  const x = current.exercise;
+  return (
+    <section className="player-focus">
+      <p className="eyebrow">УПРАЖНЕНИЕ {current.exerciseIndex + 1}</p>
+      <h2>{x.name}</h2>
+      <p>
+        Подход {current.setNumber} из {x.sets}
+      </p>
+      {x.target_reps !== undefined ? (
+        <>
+          <span>Цель: {x.target_reps} повторений</span>
+          <div className="rep-control">
+            <button onClick={onMinus} disabled={pending}>
+              −
+            </button>
+            <b>{reps}</b>
+            <button onClick={onPlus} disabled={pending}>
+              +
+            </button>
+          </div>
+          <button
+            className="primary-button"
+            disabled={pending}
+            onClick={onComplete}
+          >
+            {pending ? "Сохраняем…" : "Завершить подход"}
+          </button>
+        </>
+      ) : (
+        <>
+          <span>Цель: {x.target_duration_seconds} секунд</span>
+          {phase === "timer" && (
+            <strong className="countdown">{formatClock(remaining)}</strong>
+          )}
+          {phase === "timer" ? (
+            <button
+              className="primary-button"
+              disabled={pending}
+              onClick={onComplete}
+            >
+              {pending
+                ? "Сохраняем…"
+                : remaining === 0
+                  ? "Завершить подход"
+                  : "Завершить раньше"}
+            </button>
+          ) : (
+            <button className="primary-button" onClick={onStart}>
+              Начать подход
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+function RestView({
+  seconds,
+  next,
+  exerciseFinished,
+  onSkip,
+  onAdd,
+}: {
+  seconds: number;
+  original: number;
+  next: WorkoutExercise;
+  exerciseFinished: boolean;
+  onSkip: () => void;
+  onAdd: () => void;
+}) {
+  return (
+    <section className="player-focus rest">
+      <p className="eyebrow">
+        {exerciseFinished ? "УПРАЖНЕНИЕ ЗАВЕРШЕНО" : "ОТДЫХ"}
+      </p>
+      <strong className="countdown">{formatClock(seconds)}</strong>
+      <p>Следующий: {next.name}</p>
+      <div className="action-row">
+        <button onClick={onSkip}>Пропустить отдых</button>
+        <button onClick={onAdd}>+15 сек</button>
+      </div>
+    </section>
+  );
+}
+function WorkoutOutline({
+  workout,
+  sets,
+  currentID,
+}: {
+  workout: Workout;
+  sets: CompletedSet[];
+  currentID?: string;
+}) {
+  return (
+    <details className="card workout-outline">
+      <summary>План тренировки</summary>
+      {workout.exercises.map((x) => {
+        const done = sets.filter(
+          (s) => s.exercise_id === x.id && s.completed,
+        ).length;
+        return (
+          <p key={x.id}>
+            <b>{done === x.sets ? "✓" : x.id === currentID ? "●" : "○"}</b>{" "}
+            {x.name}{" "}
+            <span>
+              {done}/{x.sets}
+            </span>
+          </p>
+        );
+      })}
+    </details>
+  );
+}
+function WorkoutComplete({
+  title,
+  duration,
+  exercises,
+  total,
+  summary,
+  session,
+}: {
+  title: string;
+  duration: number;
+  exercises: number;
+  total: number;
+  summary: ReturnType<typeof workoutSummary>;
+  session: WorkoutSession;
+}) {
+  const partial = summary.completed_sets < total;
+  return (
+    <div className="empty-state workout-summary">
+      <div className="empty-icon">✓</div>
+      <h2>
+        {partial ? "Тренировка завершена досрочно" : "Тренировка завершена"}
+      </h2>
+      <p>{title}</p>
+      <div className="summary-grid">
+        <span>
+          <b>{formatClock(duration)}</b>Время
+        </span>
+        <span>
+          <b>{exercises}</b>Упражнений
+        </span>
+        <span>
+          <b>
+            {summary.completed_sets}/{total}
+          </b>
+          Подходов
+        </span>
+        <span>
+          <b>{summary.reps}</b>Повторений
+        </span>
+        <span>
+          <b>{summary.timed_seconds}</b>Секунд
+        </span>
+        <span>
+          <b>+{session.xp_earned}</b>XP
+        </span>
+      </div>
+      <p>🔥 Серия: {session.current_streak} дней</p>
+      {session.unlocked_achievements.map((x) => (
+        <span key={x}>🏆 {x}</span>
+      ))}
+      <Link className="primary-button" to="/workouts">
+        К тренировкам
+      </Link>
+    </div>
+  );
+}

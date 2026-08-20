@@ -1,0 +1,3 @@
+.publish-actions{position:sticky;z-index:3;bottom:78px;display:grid;grid-template-columns:1fr 1.35fr;gap:8px;padding:8px;border-radius:16px;background:rgb(11 18 32/.94);backdrop-filter:blur(12px)}
+.publish-actions button{width:100%;min-height:48px;margin:0;justify-content:center}
+@media(max-width:370px){.publish-actions{grid-template-columns:1fr}}

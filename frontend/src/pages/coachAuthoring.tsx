@@ -17,6 +17,7 @@ import {
   type LessonInput,
 } from "../api/coach";
 import { useSessionStore } from "../store/session";
+import "../authoringActions.css";
 export const kinds: {
   key: ContentKind;
   one: string;
@@ -832,8 +833,16 @@ function BuilderEditor({
       setValidation("");
     },
     save = useMutation({
-      mutationFn: () =>
-        saveBuilder(token(), kind, value, edit ? id : undefined),
+      mutationFn: async (publish: boolean) => {
+        const result = await saveBuilder(
+          token(),
+          kind,
+          value,
+          edit ? id : undefined,
+        );
+        if (publish) await action(token(), kind, result.id, "publish");
+        return result;
+      },
       onSuccess: (x) => {
         setDirty(false);
         setSuccess(true);
@@ -841,10 +850,10 @@ function BuilderEditor({
       },
     }),
     title = kinds.find((x) => x.key === kind)!;
-  const submit = () => {
+  const submit = (publish = false) => {
     const error = validateBuilder(kind, value);
     if (error) return setValidation(error);
-    save.mutate();
+    save.mutate(publish);
   };
   const cover = String(
     (value as BuilderInput & { cover_media_id?: string }).cover_media_id ?? "",
@@ -854,7 +863,7 @@ function BuilderEditor({
       className="stack coach-editor-page"
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        submit(false);
       }}
     >
       <Back dirty={dirty} />
@@ -1097,9 +1106,23 @@ function BuilderEditor({
       {validation && <p className="notice error">{validation}</p>}
       {success && <p className="notice success">Материал сохранён.</p>}
       {save.isError && <ErrorBox error={save.error} />}
-      <button className="primary-button sticky-save" disabled={save.isPending}>
-        {save.isPending ? "Сохраняем…" : "Сохранить"}
-      </button>
+      <div className="publish-actions">
+        <button
+          type="submit"
+          className="secondary-button"
+          disabled={save.isPending}
+        >
+          {save.isPending ? "Сохраняем…" : "Сохранить черновик"}
+        </button>
+        <button
+          type="button"
+          className="primary-button"
+          disabled={save.isPending}
+          onClick={() => submit(true)}
+        >
+          {save.isPending ? "Публикуем…" : "Сохранить и опубликовать"}
+        </button>
+      </div>
     </form>
   );
 }

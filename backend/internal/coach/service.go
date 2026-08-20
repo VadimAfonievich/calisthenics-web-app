@@ -26,13 +26,14 @@ type Role string
 func (r Role) CanManageAll() bool { return r == "admin" || r == "super_admin" }
 
 type Dashboard struct {
-	Lessons          int `json:"lessons"`
-	LessonsPublished int `json:"lessons_published"`
-	Exercises        int `json:"exercises"`
-	Workouts         int `json:"workouts"`
-	Programs         int `json:"programs"`
-	Skills           int `json:"skills"`
-	Media            int `json:"media"`
+	Lessons           int `json:"lessons"`
+	LessonsPublished  int `json:"lessons_published"`
+	Exercises         int `json:"exercises"`
+	Workouts          int `json:"workouts"`
+	WorkoutsPublished int `json:"workouts_published"`
+	Programs          int `json:"programs"`
+	Skills            int `json:"skills"`
+	Media             int `json:"media"`
 }
 type Analytics struct {
 	TotalUsers             int      `json:"total_users"`
@@ -183,8 +184,8 @@ func scope(role Role, user string) (string, []any) {
 }
 func (s *Service) Dashboard(ctx context.Context, user string, role Role) (Dashboard, error) {
 	var d Dashboard
-	q := `SELECT (SELECT count(*) FROM lessons WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM lessons WHERE status='published' AND ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM exercises WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM workouts WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM programs WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM skills WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM media_assets WHERE ($2 OR owner_user_id=$1::uuid))`
-	e := s.pool.QueryRow(ctx, q, user, role.CanManageAll()).Scan(&d.Lessons, &d.LessonsPublished, &d.Exercises, &d.Workouts, &d.Programs, &d.Skills, &d.Media)
+	q := `SELECT (SELECT count(*) FROM lessons WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM lessons WHERE status='published' AND ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM exercises WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM workouts WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM workouts WHERE status='published' AND ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM programs WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM skills WHERE ($2 OR owner_user_id=$1::uuid)),(SELECT count(*) FROM media_assets WHERE ($2 OR owner_user_id=$1::uuid))`
+	e := s.pool.QueryRow(ctx, q, user, role.CanManageAll()).Scan(&d.Lessons, &d.LessonsPublished, &d.Exercises, &d.Workouts, &d.WorkoutsPublished, &d.Programs, &d.Skills, &d.Media)
 	return d, e
 }
 func (s *Service) Analytics(ctx context.Context) (Analytics, error) {
