@@ -47,6 +47,8 @@ Analytics is aggregate-only: user activity, lesson/workout completions, popular 
 
 New workout writes use one of four canonical categories: `warmup`, `morning`, `strength`, or `skill`. The Coach selector presents these as «Разминка», «Зарядка», «Развитие силы», and «Тренировка навыков». Existing program taxonomy remains compatible: legacy values are mapped at migration/read time and are not shown as additional student workout categories.
 
+Main workouts may select a concrete published `warmup` workout. If none is selected, the published system default is used. Warmups cannot reference themselves, be archived, or launch another warmup. The pre-workout session persists its main-workout continuation in PostgreSQL so Telegram reload/resume does not lose the flow.
+
 The student `/workouts` page is the training home: it combines the four category filters with small published-program and skill previews. Full program routes are `/programs` and `/programs/:id`; programs are ordered workout collections, while `/skills` remains the separate progression graph.
 
 `CALISTHENICS_BASE` is system-owned and is shown first in the skill graph. Its eight readiness checks are rows in `skill_criteria`, with current-user confirmations in `user_skill_criteria`; clients never submit a user ID. Confirming a criterion through `POST /api/v1/skills/{id}/criteria/{criterionID}/confirm` is idempotent. The eighth confirmation masters the base, awards XP/achievement once, and unlocks skills through ordinary `skill_requirements`. `PULL_UP_BASE` and `DIP_BASE` remain preserved as hidden technical records rather than visible graph nodes. Like all system content, the base is read-only for a regular coach and manageable only through an administrator-authorized system-content workflow.

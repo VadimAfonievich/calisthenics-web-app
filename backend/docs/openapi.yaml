@@ -107,6 +107,15 @@ paths:
       security: [{bearerAuth: []}]
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                planned_workout_id: {type: string, format: uuid}
+                follow_up_workout_id: {type: string, format: uuid, description: Main workout to continue after this warmup}
       responses:
         '201': {description: Active workout session}
         '400': {description: Invalid workout UUID}
@@ -408,6 +417,7 @@ components:
         category: {type: string, enum: [warmup, morning, strength, skill]}
         estimated_minutes: {type: integer, minimum: 1, maximum: 1440}
         warmup_enabled: {type: boolean, default: true, description: Offers the separate default warmup at runtime; forced false for warmup category}
+        warmup_workout_id: {type: string, format: uuid, nullable: true, description: Selected published warmup; null uses the system default}
         exercises: {type: array, items: {$ref: '#/components/schemas/AdminWorkoutExerciseInput'}}
     AdminWorkoutExerciseInput:
       type: object

@@ -15,7 +15,7 @@ type WorkoutStore interface {
 	List(context.Context, string) ([]workouts.CatalogItem, error)
 	Today(context.Context) (workouts.Workout, error)
 	Get(context.Context, string) (workouts.Workout, error)
-	Start(context.Context, string, string, *string) (workouts.Session, error)
+	Start(context.Context, string, string, workouts.StartInput) (workouts.Session, error)
 	GetSession(context.Context, string, string) (workouts.ActiveSession, error)
 	RecordSet(context.Context, string, string, workouts.SetInput) error
 	Complete(context.Context, string, string, int32) (workouts.Session, error)
@@ -77,14 +77,19 @@ func start(s WorkoutStore) http.HandlerFunc {
 		}
 		u, _ := wu(r)
 		var body struct {
-			PlannedWorkoutID *string `json:"planned_workout_id"`
+			PlannedWorkoutID  *string `json:"planned_workout_id"`
+			FollowUpWorkoutID *string `json:"follow_up_workout_id"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		if body.PlannedWorkoutID != nil && !validUUID(*body.PlannedWorkoutID) {
 			writeError(w, 400, "INVALID_INPUT", "Planned workout id must be a valid UUID")
 			return
 		}
-		x, e := s.Start(r.Context(), u, workoutID, body.PlannedWorkoutID)
+		if body.FollowUpWorkoutID != nil && (!validUUID(*body.FollowUpWorkoutID) || *body.FollowUpWorkoutID == workoutID) {
+			writeError(w, 400, "INVALID_INPUT", "Follow-up workout id must be a different valid UUID")
+			return
+		}
+		x, e := s.Start(r.Context(), u, workoutID, workouts.StartInput{PlannedWorkoutID: body.PlannedWorkoutID, FollowUpWorkoutID: body.FollowUpWorkoutID})
 		if e != nil {
 			writeError(w, wh(e), "WORKOUT_START_FAILED", "Could not start workout")
 			return

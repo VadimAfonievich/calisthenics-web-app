@@ -32,8 +32,9 @@ func (s *lessonIDStoreStub) Complete(context.Context, string, string) (lessons.C
 }
 
 type workoutIDStoreStub struct {
-	called bool
-	err    error
+	called     bool
+	err        error
+	startInput workouts.StartInput
 }
 
 func (s *workoutIDStoreStub) List(context.Context, string) ([]workouts.CatalogItem, error) {
@@ -50,9 +51,34 @@ func (s *workoutIDStoreStub) Get(context.Context, string) (workouts.Workout, err
 	s.called = true
 	return workouts.Workout{}, nil
 }
-func (s *workoutIDStoreStub) Start(context.Context, string, string, *string) (workouts.Session, error) {
+func (s *workoutIDStoreStub) Start(_ context.Context, _, _ string, in workouts.StartInput) (workouts.Session, error) {
 	s.called = true
+	s.startInput = in
 	return workouts.Session{}, nil
+}
+
+func TestWorkoutStartPersistsFollowUpContext(t *testing.T) {
+	store := &workoutIDStoreStub{}
+	router := chi.NewRouter()
+	router.Post("/workouts/{id}/start", start(store))
+	req := httptest.NewRequest(http.MethodPost, "/workouts/20000000-0000-0000-0000-000000000001/start", strings.NewReader(`{"follow_up_workout_id":"30000000-0000-0000-0000-000000000001"}`))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated || store.startInput.FollowUpWorkoutID == nil || *store.startInput.FollowUpWorkoutID != "30000000-0000-0000-0000-000000000001" {
+		t.Fatalf("status=%d input=%+v body=%s", w.Code, store.startInput, w.Body.String())
+	}
+}
+
+func TestWorkoutStartRejectsSelfFollowUp(t *testing.T) {
+	store := &workoutIDStoreStub{}
+	router := chi.NewRouter()
+	router.Post("/workouts/{id}/start", start(store))
+	req := httptest.NewRequest(http.MethodPost, "/workouts/20000000-0000-0000-0000-000000000001/start", strings.NewReader(`{"follow_up_workout_id":"20000000-0000-0000-0000-000000000001"}`))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || store.called {
+		t.Fatalf("status=%d called=%v body=%s", w.Code, store.called, w.Body.String())
+	}
 }
 func (s *workoutIDStoreStub) RecordSet(context.Context, string, string, workouts.SetInput) error {
 	s.called = true

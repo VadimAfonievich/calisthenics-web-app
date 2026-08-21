@@ -218,10 +218,12 @@ export function WorkoutPreviewPage() {
         });
         planned = result.planned_workout.id;
       }
-      const result=await start(token!, workoutID, usePlanned?planned:undefined);
-      return {result,next,nextPlanned:next?planned:undefined};
+      return start(token!, workoutID, {
+        ...(usePlanned && planned ? {planned_workout_id:planned} : {}),
+        ...(next ? {follow_up_workout_id:next, ...(planned?{planned_workout_id:planned}:{})} : {}),
+      });
     },
-    onSuccess: ({result,next,nextPlanned}) => {const nextParams=new URLSearchParams();if(next)nextParams.set("next",next);if(nextPlanned)nextParams.set("next_planned",nextPlanned);navigate(`/workout-session/${result.session.id}${nextParams.size?`?${nextParams}`:""}`)},
+    onSuccess: (result) => navigate(`/workout-session/${result.session.id}`),
   });
   if (!token) return <Notice />;
   if (!valid)
@@ -294,16 +296,13 @@ export function WorkoutPreviewPage() {
   );
 }
 
-type Phase = "set" | "timer" | "rest" | "done";
+type Phase = "prepare" | "set" | "timer" | "rest" | "done" | "transition";
 export function WorkoutPlayerPage() {
   const { id = "" } = useParams(),
     token = useSessionStore((s) => s.accessToken),
     qc = useQueryClient(),
     navigate = useNavigate(),
-    [search] = useSearchParams(),
     valid = isValidEntityID(id);
-  const nextWorkout=search.get("next")??"";
-  const nextPlanned=search.get("next_planned")??undefined;
   const query = useQuery({
     queryKey: ["workout-session", id],
     queryFn: () => getSession(token!, id),
@@ -311,22 +310,26 @@ export function WorkoutPlayerPage() {
     retry: false,
   });
   const [dataSets, setDataSets] = useState<CompletedSet[]>([]),
-    [phase, setPhase] = useState<Phase>("set"),
+    [phase, setPhase] = useState<Phase>("prepare"),
     [now, setNow] = useState(Date.now()),
     [remaining, setRemaining] = useState(0),
     [rest, setRest] = useState(0),
     [actualReps, setActualReps] = useState(0),
+    [transitionRemaining,setTransitionRemaining]=useState(5),
+    [voices,setVoices]=useState<SpeechSynthesisVoice[]>([]),
     [voiceEnabled,setVoiceEnabled]=useState(voiceCoachPreference);
   const timerStarted = useRef(0);
+  const autoSaved = useRef("");
   const phaseDeadline=useRef(0);
   const voice=useRef(new VoiceCoach(voiceEnabled));
   useEffect(()=>()=>voice.current.cancel(),[]);
+  useEffect(()=>{if(!voice.current.isSupported())return;const refresh=()=>setVoices(voice.current.voices());refresh();window.speechSynthesis.addEventListener?.("voiceschanged",refresh);return()=>window.speechSynthesis.removeEventListener?.("voiceschanged",refresh)},[]);
   useEffect(() => {
     const i = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(i);
   }, []);
   useEffect(() => {
-    if (query.data) setDataSets(query.data.completed_sets);
+    if (query.data) { setDataSets(query.data.completed_sets); if(query.data.session.status!=="completed"&&phaseDeadline.current===0){setRemaining(5);phaseDeadline.current=Date.now()+5000;setPhase("prepare");} }
   }, [query.data]);
   const current = useMemo(
     () => (query.data ? nextSet(query.data.workout, dataSets) : null),
@@ -337,9 +340,10 @@ export function WorkoutPlayerPage() {
       setActualReps(current.exercise.target_reps);
   }, [current?.exercise.id, current?.setNumber]);
   useEffect(() => {
-    if ((phase !== "timer" && phase !== "rest") || !phaseDeadline.current) return;
+    if ((phase !== "timer" && phase !== "rest" && phase !== "prepare" && phase !== "transition") || !phaseDeadline.current) return;
     const next=Math.max(0,Math.ceil((phaseDeadline.current-now)/1000));
-    setRemaining(current=>current===next?current:next);
+    if(phase==="transition") setTransitionRemaining(current=>current===next?current:next);
+    else setRemaining(current=>current===next?current:next);
   }, [phase,now]);
   useEffect(() => {
     if (phase === "timer" && remaining === 0 && timerStarted.current) {
@@ -355,11 +359,19 @@ export function WorkoutPlayerPage() {
     }
     if (phase === "rest" && remaining === 0) {
       voice.current.cancel();
-      voice.current.restCountdown(0);
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
-      setPhase("set");
+      setRemaining(5); phaseDeadline.current=Date.now()+5000; setPhase("prepare");
     }
-  }, [phase, remaining]);
+    if (phase === "prepare" && remaining>0 && remaining<=5) voice.current.countdown("prepare",remaining);
+    if (phase === "prepare" && remaining===0 && current) {
+      if(current.exercise.target_duration_seconds!==undefined){
+        voice.current.announceStart(); const seconds=current.exercise.target_duration_seconds; timerStarted.current=Date.now(); phaseDeadline.current=Date.now()+seconds*1000; setRemaining(seconds); setPhase("timer");
+      } else {
+        voice.current.announceExercise(current.exercise.name,current.exercise.target_reps);
+        setPhase("set");
+      }
+    }
+  }, [phase, remaining, current]);
   const record = useMutation({
     mutationFn: (payload: { reps?: number; duration_seconds?: number }) =>
       saveSet(token!, id, {
@@ -371,6 +383,7 @@ export function WorkoutPlayerPage() {
     onSuccess: (_, payload) => {
       voice.current.cancel();
       voice.current.announceSetComplete();
+      if(current!.setNumber===current!.exercise.sets) voice.current.announceExerciseComplete();
       const item = {
         exercise_id: current!.exercise.id,
         set_number: current!.setNumber,
@@ -389,6 +402,7 @@ export function WorkoutPlayerPage() {
       ];
       setDataSets(updated);
       timerStarted.current = 0;
+      autoSaved.current = "";
       const final =
         completedCount(dataSets) + 1 >= totalSets(query.data!.workout);
       if (final) setPhase("done");
@@ -403,18 +417,25 @@ export function WorkoutPlayerPage() {
       } else {
         const upcoming=nextSet(query.data!.workout,updated);
         if (upcoming && upcoming.exercise.id!==current!.exercise.id) voice.current.announceNextExercise(upcoming.exercise.name);
-        setPhase("set");
+        setRemaining(5); phaseDeadline.current=Date.now()+5000; setPhase("prepare");
       }
     },
   });
+  useEffect(()=>{
+    if(phase!=="timer"||remaining!==0||!timerStarted.current||!current||record.isPending)return;
+    const key=`${current.exercise.id}:${current.setNumber}`;
+    if(autoSaved.current===key)return;
+    autoSaved.current=key;
+    record.mutate({duration_seconds:current.exercise.target_duration_seconds??actualTimedSetSeconds(timerStarted.current)});
+  },[phase,remaining,current,record.isPending]);
   const finish = useMutation({
     mutationFn: () =>
       complete(token!, id, elapsedSeconds(query.data!.session.started_at)),
-    onSuccess: async () => {
+    onSuccess: ({session:completed}) => {
       qc.invalidateQueries({ queryKey: ["progress"] });
       qc.invalidateQueries({ queryKey: ["workouts"] });
-      if (isValidEntityID(nextWorkout)) {
-        try { const next=await start(token!,nextWorkout,isValidEntityID(nextPlanned)?nextPlanned:undefined); navigate(`/workout-session/${next.session.id}`); } catch { navigate(`/workouts/${nextWorkout}`); }
+      if(completed.next_session?.id||completed.continued_session_id){
+        phaseDeadline.current=Date.now()+5000;setTransitionRemaining(5);setPhase("transition");
       }
     },
   });
@@ -436,6 +457,9 @@ export function WorkoutPlayerPage() {
     done = completedCount(dataSets),
     elapsed = elapsedSeconds(session.started_at, now),
     summary = workoutSummary(dataSets);
+  const continuation=finish.data?.session.next_session?.id??finish.data?.session.continued_session_id??session.continued_session_id;
+  if ((phase==="transition"||session.status==="completed") && continuation)
+    return <section className="player-focus warmup-transition"><p className="eyebrow">РАЗМИНКА ЗАВЕРШЕНА</p><h2>{finish.data?.session.follow_up_workout_title??session.follow_up_workout_title??"Основная тренировка"}</h2><p>Начинаем через {transitionRemaining}</p><button className="primary-button" onClick={()=>navigate(`/workout-session/${continuation}`)}>Начать сейчас</button>{transitionRemaining===0&&<NavigateToSession id={continuation} navigate={navigate}/>}</section>;
   if (finish.isSuccess)
     return (
       <WorkoutComplete
@@ -480,6 +504,7 @@ export function WorkoutPlayerPage() {
       <div className="voice-controls">
         <button onClick={()=>{const enabled=!voiceEnabled;setVoiceEnabled(enabled);saveVoiceCoachPreference(enabled);voice.current.setEnabled(enabled);}} aria-pressed={voiceEnabled}>🔊 Голос: {voiceEnabled?"Вкл":"Выкл"}</button>
         <button disabled={!voice.current.isSupported()||!voiceEnabled} onClick={()=>voice.current.test()}>Проверить голос</button>
+        {voices.length>0&&<label>Голос<select aria-label="Голос" defaultValue={voice.current.selectedVoice()?.voiceURI} onChange={(e)=>{voice.current.setVoice(e.target.value);voice.current.test()}}>{voices.map(v=><option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>)}</select></label>}
         {!voice.current.isSupported()&&<small>Голосовые подсказки недоступны на этом устройстве.</small>}
       </div>
       <div className="progress-track">
@@ -506,7 +531,7 @@ export function WorkoutPlayerPage() {
             voice.current.cancel();
             phaseDeadline.current=0;
             setRemaining(0);
-            setPhase("set");
+            setRemaining(5);phaseDeadline.current=Date.now()+5000;setPhase("prepare");
           }}
           onAdd={() => {const next=addRestSeconds(remaining);phaseDeadline.current=Date.now()+next*1000;setRemaining(next)}}
         />
@@ -610,7 +635,7 @@ function SetView({
       <p>
         Подход {current.setNumber} из {x.sets}
       </p>
-      {x.target_reps !== undefined ? (
+      {phase==="prepare" ? <><span>Приготовьтесь…</span><strong className="countdown">{remaining}</strong></> : x.target_reps !== undefined ? (
         <>
           <span>Цель: {x.target_reps} повторений</span>
           <div className="rep-control">
@@ -627,7 +652,7 @@ function SetView({
             disabled={pending}
             onClick={onComplete}
           >
-            {pending ? "Сохраняем…" : "Завершить подход"}
+            {pending ? "Сохраняем…" : "Готово"}
           </button>
         </>
       ) : (
@@ -648,15 +673,15 @@ function SetView({
                   ? "Завершить подход"
                   : "Завершить раньше"}
             </button>
-          ) : (
-            <button className="primary-button" onClick={onStart}>
-              Начать подход
-            </button>
-          )}
+          ) : <span>Приготовьтесь…</span>}
         </>
       )}
     </section>
   );
+}
+function NavigateToSession({id,navigate}:{id:string;navigate:(path:string)=>void}) {
+  useEffect(()=>{navigate(`/workout-session/${id}`)},[id,navigate]);
+  return null;
 }
 function RestView({
   seconds,

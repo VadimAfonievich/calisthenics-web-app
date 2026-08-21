@@ -97,6 +97,7 @@ export type BuilderInput = {
   workouts?: ProgramWorkout[];
   sort_order?: number;
   warmup_enabled?: boolean;
+  warmup_workout_id?: string;
 };
 export type ProgramWorkout = { workout_id: string; sort_order: number };
 export type Option = {
@@ -115,6 +116,7 @@ export type CoachOptions = {
   programs: Option[];
   program_levels: Option[];
   workouts: Option[];
+  warmups: Option[];
   skills: Option[];
   media: Option[];
 };

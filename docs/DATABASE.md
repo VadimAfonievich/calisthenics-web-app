@@ -4,6 +4,8 @@
 
 PostgreSQL is the source of truth for Calisthenics Coach. The database is a normalized schema for one modular monolith and is changed only through `golang-migrate` migration files in `backend/internal/db/migrations`.
 
+Migration `000010_workout_player_flow` adds the optional selected warmup relation and persisted warmup-to-main session context. `continued_session_id` makes completion retries return the same main session instead of creating duplicates.
+
 The Phase 2 schema contains 16 tables: `users`, `profiles`, `lesson_categories`, `lessons`, `user_lesson_progress`, `exercises`, `programs`, `workouts`, `workout_exercises`, `workout_sessions`, `exercise_sets`, `user_progress`, `user_exercise_stats`, `achievements`, `user_achievements`, and `admin_users`.
 
 ## Identifier and time strategy

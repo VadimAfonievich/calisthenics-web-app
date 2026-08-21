@@ -429,6 +429,10 @@ export const builderPayload = (
       category: value.category,
       estimated_minutes: value.estimated_minutes,
       warmup_enabled: value.category === "warmup" ? false : value.warmup_enabled,
+      warmup_workout_id:
+        value.category === "warmup" || value.warmup_enabled === false
+          ? undefined
+          : value.warmup_workout_id,
       exercises: value.exercises,
     };
   if (kind === "exercises")
@@ -1269,6 +1273,8 @@ function BuilderEditor({
                     e.target.value === "warmup"
                       ? false
                       : (value.warmup_enabled ?? true),
+                  warmup_workout_id:
+                    e.target.value === "warmup" ? undefined : value.warmup_workout_id,
                 })
               }
             >
@@ -1482,8 +1488,18 @@ export function WorkoutFields({
             aria-label="Разминка перед тренировкой"
             type="checkbox"
             checked={value.warmup_enabled ?? true}
-            onChange={(e) => change({...value, warmup_enabled:e.target.checked})}
+            onChange={(e) => change({...value, warmup_enabled:e.target.checked, warmup_workout_id:e.target.checked?value.warmup_workout_id:undefined})}
           />
+        </label>
+      )}
+      {value.category !== "warmup" && (value.warmup_enabled ?? true) && (
+        <label>
+          Выберите разминку
+          <select value={value.warmup_workout_id ?? ""} onChange={(e)=>change({...value,warmup_workout_id:e.target.value||undefined})}>
+            <option value="">Стандартная разминка</option>
+            {opts?.warmups?.map((warmup)=><option value={warmup.id} key={warmup.id}>{optionName(warmup)}</option>)}
+          </select>
+          <small>Если ничего не выбрано, будет использована стандартная разминка.</small>
         </label>
       )}
       <h3>Упражнения</h3>
