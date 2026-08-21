@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Link,
@@ -43,6 +43,11 @@ const Notice = () => (
     <h2>Тренировки доступны в Telegram</h2>
   </div>
 );
+
+export function WorkoutPlayerRoute() {
+  const {id=""}=useParams();
+  return <WorkoutPlayerPage key={id}/>;
+}
 export const canonicalCategory = (value: string) =>
   ({
     WARMUP: "warmup",
@@ -315,7 +320,6 @@ export function WorkoutPlayerPage() {
     [remaining, setRemaining] = useState(0),
     [rest, setRest] = useState(0),
     [actualReps, setActualReps] = useState(0),
-    [transitionRemaining,setTransitionRemaining]=useState(5),
     [voices,setVoices]=useState<SpeechSynthesisVoice[]>([]),
     [voiceEnabled,setVoiceEnabled]=useState(voiceCoachPreference);
   const timerStarted = useRef(0);
@@ -340,10 +344,9 @@ export function WorkoutPlayerPage() {
       setActualReps(current.exercise.target_reps);
   }, [current?.exercise.id, current?.setNumber]);
   useEffect(() => {
-    if ((phase !== "timer" && phase !== "rest" && phase !== "prepare" && phase !== "transition") || !phaseDeadline.current) return;
+    if ((phase !== "timer" && phase !== "rest" && phase !== "prepare") || !phaseDeadline.current) return;
     const next=Math.max(0,Math.ceil((phaseDeadline.current-now)/1000));
-    if(phase==="transition") setTransitionRemaining(current=>current===next?current:next);
-    else setRemaining(current=>current===next?current:next);
+    setRemaining(current=>current===next?current:next);
   }, [phase,now]);
   useEffect(() => {
     if (phase === "timer" && remaining === 0 && timerStarted.current) {
@@ -435,7 +438,7 @@ export function WorkoutPlayerPage() {
       qc.invalidateQueries({ queryKey: ["progress"] });
       qc.invalidateQueries({ queryKey: ["workouts"] });
       if(completed.next_session?.id||completed.continued_session_id){
-        phaseDeadline.current=Date.now()+5000;setTransitionRemaining(5);setPhase("transition");
+        phaseDeadline.current=0;setPhase("transition");
       }
     },
   });
@@ -459,7 +462,7 @@ export function WorkoutPlayerPage() {
     summary = workoutSummary(dataSets);
   const continuation=finish.data?.session.next_session?.id??finish.data?.session.continued_session_id??session.continued_session_id;
   if ((phase==="transition"||session.status==="completed") && continuation)
-    return <section className="player-focus warmup-transition"><p className="eyebrow">РАЗМИНКА ЗАВЕРШЕНА</p><h2>{finish.data?.session.follow_up_workout_title??session.follow_up_workout_title??"Основная тренировка"}</h2><p>Начинаем через {transitionRemaining}</p><button className="primary-button" onClick={()=>navigate(`/workout-session/${continuation}`)}>Начать сейчас</button>{transitionRemaining===0&&<NavigateToSession id={continuation} navigate={navigate}/>}</section>;
+    return <WarmupTransition sessionID={continuation} title={finish.data?.session.follow_up_workout_title??session.follow_up_workout_title??"Основная тренировка"} onContinue={(mainSessionID)=>navigate(`/workout-session/${mainSessionID}`)}/>;
   if (finish.isSuccess)
     return (
       <WorkoutComplete
@@ -679,9 +682,21 @@ function SetView({
     </section>
   );
 }
-function NavigateToSession({id,navigate}:{id:string;navigate:(path:string)=>void}) {
-  useEffect(()=>{navigate(`/workout-session/${id}`)},[id,navigate]);
-  return null;
+export function WarmupTransition({sessionID,title,onContinue}:{sessionID:string;title:string;onContinue:(sessionID:string)=>void|Promise<void>}) {
+  const [remaining,setRemaining]=useState(5),[starting,setStarting]=useState(false),[error,setError]=useState("");
+  const deadline=useRef(Date.now()+5000),transitionStarted=useRef(false);
+  const continueToMainWorkout=useCallback(async()=>{
+    if(transitionStarted.current)return;
+    transitionStarted.current=true;deadline.current=0;setStarting(true);setError("");
+    try{await onContinue(sessionID)}catch{
+      transitionStarted.current=false;setStarting(false);setError("Не удалось открыть основную тренировку.");
+    }
+  },[onContinue,sessionID]);
+  useEffect(()=>{
+    const update=()=>{if(!deadline.current)return;const next=Math.max(0,Math.ceil((deadline.current-Date.now())/1000));setRemaining(next);if(next===0)void continueToMainWorkout()};
+    const timer=window.setInterval(update,250);update();return()=>window.clearInterval(timer);
+  },[continueToMainWorkout]);
+  return <section className="player-focus warmup-transition"><p className="eyebrow">РАЗМИНКА ЗАВЕРШЕНА</p><h2>{title}</h2><p>{starting?"Начинаем!":`Начинаем через ${remaining}`}</p>{error&&<p className="notice error">{error}</p>}<button className="primary-button" disabled={starting} onClick={()=>void continueToMainWorkout()}>{error?"Повторить":starting?"Открываем…":"Начать сейчас"}</button></section>;
 }
 function RestView({
   seconds,

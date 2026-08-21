@@ -6,7 +6,7 @@ import { LessonPage, LessonsPage } from "../pages/lessons";
 import { ExercisePage, ExercisesPage } from "../pages/exercises";
 import {
   WorkoutCatalogPage,
-  WorkoutPlayerPage,
+  WorkoutPlayerRoute,
   WorkoutPreviewPage,
 } from "../pages/workout";
 import { ProgressPage } from "../pages/progress";
@@ -41,7 +41,7 @@ export function AppRouter() {
         <Route path="exercises/:id" element={<ExercisePage />} />
         <Route path="workouts" element={<WorkoutCatalogPage />} />
         <Route path="workouts/:id" element={<WorkoutPreviewPage />} />
-        <Route path="workout-session/:id" element={<WorkoutPlayerPage />} />
+        <Route path="workout-session/:id" element={<WorkoutPlayerRoute />} />
         <Route
           path="workout/today"
           element={<Navigate to="/workouts" replace />}
