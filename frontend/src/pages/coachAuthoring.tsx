@@ -21,6 +21,7 @@ import {
   type ContentKind,
   type LessonBlock,
   type LessonInput,
+  type ProgramWorkout,
 } from "../api/coach";
 import { useSessionStore } from "../store/session";
 import "../authoringActions.css";
@@ -396,6 +397,22 @@ export const workoutTarget = (mode: "reps" | "time") =>
   mode === "time"
     ? { target_reps: undefined, target_duration_seconds: 30 }
     : { target_reps: 10, target_duration_seconds: undefined };
+export const numericValue = (raw: string) =>
+  raw === "" ? undefined : Number(raw);
+export const normalizeProgramWorkouts = (items: ProgramWorkout[]) =>
+  items.map((item, sort_order) => ({ ...item, sort_order }));
+export const moveProgramWorkout = (
+  items: ProgramWorkout[],
+  index: number,
+  direction: -1 | 1,
+) => {
+  const target = index + direction;
+  if (target < 0 || target >= items.length)
+    return normalizeProgramWorkouts(items);
+  const next = [...items];
+  [next[index], next[target]] = [next[target], next[index]];
+  return normalizeProgramWorkouts(next);
+};
 export function CoachEditor() {
   const { kind = "lessons", id = "new" } = useParams();
   const [search] = useSearchParams();
@@ -517,6 +534,8 @@ function LessonEditor({
     if (!value.category_id) return setValidation("Выберите категорию урока.");
     if (!value.short_description.trim())
       return setValidation("Добавьте краткое описание урока.");
+    if (!Number.isFinite(value.duration_minutes) || value.duration_minutes < 1)
+      return setValidation("Укажите длительность урока.");
     if (
       value.blocks.some(
         (x) => (x.type === "image" || x.type === "video") && !x.media_id,
@@ -631,9 +650,12 @@ function LessonEditor({
           <input
             type="number"
             min="1"
-            value={value.duration_minutes}
+            value={value.duration_minutes ?? ""}
             onChange={(e) =>
-              change({ ...value, duration_minutes: +e.target.value })
+              change({
+                ...value,
+                duration_minutes: numericValue(e.target.value) as number,
+              })
             }
           />
         </label>
@@ -800,7 +822,7 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
       }
     : {}),
   ...(kind === "programs"
-    ? { name: "", duration_weeks: 4, category: "OTHER", levels: [] }
+    ? { name: "", duration_weeks: 4, category: "OTHER", workouts: [] }
     : {}),
   ...(kind === "skills"
     ? {
@@ -854,9 +876,16 @@ export function validateBuilder(
     if (
       exercises.some(
         (x) =>
+          !Number.isFinite(x.sets) ||
           x.sets < 1 ||
+          !Number.isFinite(x.rest_seconds) ||
           x.rest_seconds < 0 ||
-          ((x.target_reps ?? 0) < 1 && (x.target_duration_seconds ?? 0) < 1),
+          (x.target_reps == null && x.target_duration_seconds == null) ||
+          (x.target_reps != null &&
+            (!Number.isFinite(x.target_reps) || x.target_reps < 1)) ||
+          (x.target_duration_seconds != null &&
+            (!Number.isFinite(x.target_duration_seconds) ||
+              x.target_duration_seconds < 1)),
       )
     )
       return "Проверьте подходы, повторения или время и отдых у каждого упражнения.";
@@ -866,11 +895,20 @@ export function validateBuilder(
     (!value.duration_weeks || value.duration_weeks < 1)
   )
     return "Укажите продолжительность программы.";
+  if (kind === "programs" && publish && !value.workouts?.length)
+    return "Добавьте хотя бы одну тренировку.";
   if (kind === "skills") {
     if (!value.icon?.trim()) return "Добавьте значок прогрессии.";
     if (!value.final_criterion_value || value.final_criterion_value < 1)
       return "Укажите итоговый критерий прогрессии.";
     if (!value.levels?.length) return "Добавьте хотя бы один этап прогрессии.";
+    if (
+      value.levels.some(
+        (level) =>
+          !Number.isFinite(level.criterion_value) || level.criterion_value < 1,
+      )
+    )
+      return "Укажите значение критерия для каждого этапа.";
   }
   return "";
 }
@@ -944,14 +982,25 @@ function BuilderEditor({
             };
           })
         : undefined;
+      const workouts = Array.isArray(item.workouts)
+        ? item.workouts.map((workout) => {
+            const x = workout as Record<string, unknown>;
+            return {
+              workout_id: String(x.workout_id ?? ""),
+              sort_order: Number(x.sort_order ?? 0),
+            };
+          })
+        : undefined;
       const clean = { ...item };
       delete clean.levels;
       delete clean.exercises;
+      delete clean.workouts;
       setValue({
         ...blankBuilder(kind),
         ...clean,
         ...(levels ? { levels } : {}),
         ...(exercises ? { exercises } : {}),
+        ...(workouts ? { workouts } : {}),
       } as BuilderInput);
     }
   }, [detail.data, kind]);
@@ -1162,20 +1211,7 @@ function BuilderEditor({
         <WorkoutFields value={value} change={change} opts={opts.data} />
       )}{" "}
       {kind === "programs" && (
-        <>
-          <label>
-            Продолжительность, недель
-            <input
-              type="number"
-              min="1"
-              value={value.duration_weeks}
-              onChange={(e) =>
-                change({ ...value, duration_weeks: +e.target.value })
-              }
-            />
-          </label>
-          <Stages value={value} change={change} kind="programs" />
-        </>
+        <ProgramWorkouts value={value} change={change} opts={opts.data} />
       )}
       {kind === "skills" && (
         <>
@@ -1192,9 +1228,9 @@ function BuilderEditor({
               <input
                 type="number"
                 min="0"
-                value={value.xp_reward ?? 0}
+                value={value.xp_reward ?? ""}
                 onChange={(e) =>
-                  change({ ...value, xp_reward: +e.target.value })
+                  change({ ...value, xp_reward: numericValue(e.target.value) })
                 }
               />
             </label>
@@ -1218,11 +1254,45 @@ function BuilderEditor({
             <input
               type="number"
               min="1"
-              value={value.final_criterion_value ?? 1}
+              value={value.final_criterion_value ?? ""}
               onChange={(e) =>
-                change({ ...value, final_criterion_value: +e.target.value })
+                change({
+                  ...value,
+                  final_criterion_value: numericValue(e.target.value),
+                })
               }
             />
+          </label>
+          <label>
+            Расположение в карте навыков
+            <select
+              value={
+                opts.data?.skills.find(
+                  (skill) => skill.sort_order === (value.sort_order ?? 0) - 1,
+                )?.id ?? ""
+              }
+              onChange={(e) => {
+                const previous = opts.data?.skills.find(
+                  (skill) => skill.id === e.target.value,
+                );
+                change({
+                  ...value,
+                  sort_order: previous ? (previous.sort_order ?? 0) + 1 : 0,
+                });
+              }}
+            >
+              <option value="">В конце карты</option>
+              {opts.data?.skills
+                .filter((skill) => skill.id !== id)
+                .map((skill) => (
+                  <option value={skill.id} key={skill.id}>
+                    После: {skill.name}
+                  </option>
+                ))}
+            </select>
+            <small>
+              Расположение не изменяет обязательные предыдущие навыки.
+            </small>
           </label>
           <Stages
             value={value}
@@ -1359,8 +1429,10 @@ function WorkoutFields({
         <input
           type="number"
           min="1"
-          value={value.day_number ?? 1}
-          onChange={(e) => change({ ...value, day_number: +e.target.value })}
+          value={value.day_number ?? ""}
+          onChange={(e) =>
+            change({ ...value, day_number: numericValue(e.target.value) })
+          }
         />
         <small>
           Номер дня должен быть уникальным внутри выбранной программы.
@@ -1371,9 +1443,12 @@ function WorkoutFields({
         <input
           type="number"
           min="1"
-          value={value.estimated_minutes}
+          value={value.estimated_minutes ?? ""}
           onChange={(e) =>
-            change({ ...value, estimated_minutes: +e.target.value })
+            change({
+              ...value,
+              estimated_minutes: numericValue(e.target.value),
+            })
           }
         />
       </label>
@@ -1397,8 +1472,10 @@ function WorkoutFields({
               <input
                 type="number"
                 min="1"
-                value={x.sets}
-                onChange={(e) => update(i, { sets: +e.target.value })}
+                value={x.sets ?? ""}
+                onChange={(e) =>
+                  update(i, { sets: numericValue(e.target.value) as number })
+                }
               />
             </label>
             <label>
@@ -1418,13 +1495,17 @@ function WorkoutFields({
               <input
                 type="number"
                 min="1"
-                value={timed ? x.target_duration_seconds : x.target_reps}
+                value={
+                  (timed ? x.target_duration_seconds : x.target_reps) ?? ""
+                }
                 onChange={(e) =>
                   update(
                     i,
                     timed
-                      ? { target_duration_seconds: +e.target.value }
-                      : { target_reps: +e.target.value },
+                      ? {
+                          target_duration_seconds: numericValue(e.target.value),
+                        }
+                      : { target_reps: numericValue(e.target.value) },
                   )
                 }
               />
@@ -1434,8 +1515,12 @@ function WorkoutFields({
               <input
                 type="number"
                 min="0"
-                value={x.rest_seconds}
-                onChange={(e) => update(i, { rest_seconds: +e.target.value })}
+                value={x.rest_seconds ?? ""}
+                onChange={(e) =>
+                  update(i, {
+                    rest_seconds: numericValue(e.target.value) as number,
+                  })
+                }
               />
             </label>
             <label className="wide-field">
@@ -1515,6 +1600,123 @@ function WorkoutFields({
     </>
   );
 }
+function ProgramWorkouts({
+  value,
+  change,
+  opts,
+}: {
+  value: BuilderInput;
+  change: (x: BuilderInput) => void;
+  opts?: Awaited<ReturnType<typeof coachOptions>>;
+}) {
+  const [selecting, setSelecting] = useState(false),
+    [search, setSearch] = useState("");
+  const selected = value.workouts ?? [];
+  const byID = new Map(opts?.workouts.map((x) => [x.id, x]) ?? []);
+  const available = (opts?.workouts ?? []).filter(
+    (x) =>
+      x.owner_user_id &&
+      !selected.some((item) => item.workout_id === x.id) &&
+      x.name.toLowerCase().includes(search.toLowerCase()),
+  );
+  const replace = (items: ProgramWorkout[]) =>
+    change({ ...value, workouts: normalizeProgramWorkouts(items) });
+  return (
+    <section className="stack program-workouts">
+      <h3>Тренировки</h3>
+      {selected.map((item, index) => {
+        const workout = byID.get(item.workout_id);
+        return (
+          <article className="card program-workout-card" key={item.workout_id}>
+            <div>
+              <b>
+                {index + 1}. {workout?.name ?? "Тренировка недоступна"}
+              </b>
+              <small>
+                {difficultyLabel[workout?.difficulty ?? ""] ??
+                  workout?.difficulty}{" "}
+                · {workout?.minutes ?? "—"} минут ·{" "}
+                {workout?.status ? statusLabel[workout.status] : "Недоступна"}
+              </small>
+            </div>
+            <div className="row-order-actions">
+              <button
+                type="button"
+                disabled={!index}
+                onClick={() => {
+                  replace(moveProgramWorkout(selected, index, -1));
+                }}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                disabled={index === selected.length - 1}
+                onClick={() => {
+                  replace(moveProgramWorkout(selected, index, 1));
+                }}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                onClick={() => replace(selected.filter((_, i) => i !== index))}
+              >
+                Удалить
+              </button>
+            </div>
+          </article>
+        );
+      })}
+      {!selected.length && (
+        <p className="notice">
+          Добавьте тренировки, которые войдут в программу.
+        </p>
+      )}
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={() => setSelecting(!selecting)}
+      >
+        + Добавить тренировку
+      </button>
+      {selecting && (
+        <div className="card workout-selector">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск тренировки"
+          />
+          {available.map((workout) => (
+            <button
+              type="button"
+              key={workout.id}
+              onClick={() => {
+                replace([
+                  ...selected,
+                  { workout_id: workout.id, sort_order: selected.length },
+                ]);
+                setSelecting(false);
+                setSearch("");
+              }}
+            >
+              <b>{workout.name}</b>
+              <small>
+                {difficultyLabel[workout.difficulty ?? ""] ??
+                  workout.difficulty}{" "}
+                · {workout.minutes} минут ·{" "}
+                {workout.status ? statusLabel[workout.status] : ""}
+              </small>
+            </button>
+          ))}
+          {!available.length && (
+            <p>Подходящих тренировок нет. Сначала создайте свою тренировку.</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 function Stages({
   value,
   change,
@@ -1529,7 +1731,7 @@ function Stages({
   const levels = value.levels ?? [];
   return (
     <>
-      <h3>{kind === "skills" ? "Этапы прогрессии" : "Этапы программы"}</h3>
+      <h3>Этапы прогрессии</h3>
       {levels.map((x, i) => (
         <div className="card stage-editor" key={i}>
           <label>
@@ -1590,13 +1792,18 @@ function Stages({
                 <input
                   type="number"
                   min="0"
-                  value={x.unlock_rule_value}
+                  value={x.unlock_rule_value ?? ""}
                   onChange={(e) =>
                     change({
                       ...value,
                       levels: levels.map((v, j) =>
                         j === i
-                          ? { ...v, unlock_rule_value: +e.target.value }
+                          ? {
+                              ...v,
+                              unlock_rule_value: numericValue(
+                                e.target.value,
+                              ) as number,
+                            }
                           : v,
                       ),
                     })
@@ -1660,13 +1867,18 @@ function Stages({
                 <input
                   type="number"
                   min="1"
-                  value={x.criterion_value}
+                  value={x.criterion_value ?? ""}
                   onChange={(e) =>
                     change({
                       ...value,
                       levels: levels.map((v, j) =>
                         j === i
-                          ? { ...v, criterion_value: +e.target.value }
+                          ? {
+                              ...v,
+                              criterion_value: numericValue(
+                                e.target.value,
+                              ) as number,
+                            }
                           : v,
                       ),
                     })

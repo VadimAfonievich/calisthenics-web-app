@@ -16,7 +16,9 @@ Lesson JSON blocks are presented with human labels and simple up/down ordering. 
 
 ## Relationships and independent lifecycle
 
-The authoring dependency direction is `Exercise → Workout → Program → Skill`. A workout stores ordered exercise rows (sets, repetitions XOR duration, rest, notes). A workout can be linked to a program level. A skill level can link to a program level, and a skill can require other skills.
+The authoring dependency direction is `Exercise → Workout → Program → Skill`. A workout stores ordered exercise rows (sets, repetitions XOR duration, rest, notes). In the Coach MVP, a program is presented as an ordered workout list. The service keeps one internal `program_level` for schema compatibility and assigns selected coach-owned workouts to it; levels are not exposed as an authoring concept. A skill level can link to a program level, and a skill can require other skills.
+
+Skills use the existing `skills.sort_order` as an explicit display position. The Coach editor expresses it as “После какого навыка?”, while prerequisites remain a separate dependency concept. Student queries order by `sort_order`, then name and ID for deterministic ties.
 
 Every lesson, exercise, workout, program, and skill has its own `draft`, `published`, and `archived` lifecycle. Publishing never cascades:
 

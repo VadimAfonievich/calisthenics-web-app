@@ -76,7 +76,7 @@ func NewService(pool *pgxpool.Pool) *Service { return &Service{pool} }
 const listSQL = `SELECT s.id::text,s.code,s.name,s.description,s.category,s.difficulty,s.icon,s.xp_reward,s.final_criterion_type,s.final_criterion_value,COALESCE(m.url,''),
 CASE WHEN usp.status IS NOT NULL THEN usp.status WHEN EXISTS(SELECT 1 FROM skill_requirements r LEFT JOIN user_skill_progress required ON required.user_id=$1::uuid AND required.skill_id=r.required_skill_id WHERE r.skill_id=s.id AND (required.status IS DISTINCT FROM 'mastered' OR (r.requirement_type='skill_level' AND required.current_level<r.requirement_value))) THEN 'locked' ELSE 'available' END,
 COALESCE(usp.current_level,1),COUNT(sl.id)::int,COALESCE(COUNT(ul.skill_level_id) FILTER(WHERE ul.status='completed'),0)::int
-FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY s.sort_order,s.name`
+FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY CASE WHEN s.sort_order=0 THEN 2147483647 ELSE s.sort_order END,s.name,s.id`
 
 func scanSkill(rows pgx.Rows) (Skill, error) {
 	var x Skill

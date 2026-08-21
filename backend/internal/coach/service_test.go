@@ -1,6 +1,10 @@
 package coach
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestLessonBlockValidation(t *testing.T) {
 	id := "10000000-0000-0000-0000-000000000001"
@@ -58,5 +62,32 @@ func TestBodyEntityIDsAreValidatedBeforeSQL(t *testing.T) {
 	}
 	if !validID("10000000-0000-0000-0000-000000000001") {
 		t.Fatal("canonical UUID rejected")
+	}
+}
+
+func TestWorkoutListJoinsProgramDifficulty(t *testing.T) {
+	workouts := tables["workouts"]
+	if workouts.difficulty != "difficulty" || !strings.Contains(workouts.listFrom, "JOIN programs") {
+		t.Fatalf("workout list must derive difficulty from program: %#v", workouts)
+	}
+}
+
+func TestCoachWorkoutListContractSerializesSystemAndOwnedRows(t *testing.T) {
+	owner := "10000000-0000-0000-0000-000000000099"
+	rows := []Item{{ID: "10000000-0000-0000-0000-000000000001", Name: "System", Status: "published", Difficulty: "beginner", OwnerUserID: nil}, {ID: "10000000-0000-0000-0000-000000000002", Name: "Owned", Status: "draft", Difficulty: "intermediate", OwnerUserID: &owner}}
+	data, err := json.Marshal(rows)
+	if err != nil || !strings.Contains(string(data), `"owner_user_id":null`) || !strings.Contains(string(data), `"difficulty":"beginner"`) {
+		t.Fatalf("workout list DTO cannot represent system rows: %s %v", data, err)
+	}
+}
+
+func TestProgramWorkoutRelationsValidateIDsOrderAndDuplicates(t *testing.T) {
+	a := "10000000-0000-0000-0000-000000000001"
+	b := "10000000-0000-0000-0000-000000000002"
+	if !validProgramWorkouts([]ProgramWorkout{{WorkoutID: a, SortOrder: 0}, {WorkoutID: b, SortOrder: 1}}) {
+		t.Fatal("valid ordered workouts rejected")
+	}
+	if validProgramWorkouts([]ProgramWorkout{{WorkoutID: a, SortOrder: 0}, {WorkoutID: a, SortOrder: 1}}) {
+		t.Fatal("duplicate workout accepted")
 	}
 }

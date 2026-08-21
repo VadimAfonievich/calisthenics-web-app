@@ -226,7 +226,7 @@ paths:
     get:
       summary: Get human-friendly selector options for Coach editors
       security: [{bearerAuth: []}]
-      responses: {'200': {description: Categories and status-aware exercise, program, program-level, workout, skill, and media options}}
+      responses: {'200': {description: Status-aware options including workout difficulty/duration and deterministic skill sort_order}}
   /api/v1/coach/{kind}:
     get:
       summary: Search and filter coach-owned plus read-only system content
@@ -235,7 +235,7 @@ paths:
     post:
       summary: Create coach-owned content with a server-generated UUID and slug where applicable
       security: [{bearerAuth: []}]
-      responses: {'201': {description: Draft created}, '400': {description: Validation failed}}
+      responses: {'201': {description: Draft created; programs accept ordered workouts and skills accept sort_order}, '400': {description: Validation failed}}
   /api/v1/coach/{kind}/{id}:
     get:
       summary: Load owned or read-only system content into an editor
@@ -244,7 +244,7 @@ paths:
     put:
       summary: Update owned content
       security: [{bearerAuth: []}]
-      responses: {'200': {description: Content updated}, '403': {description: Foreign owner}}
+      responses: {'200': {description: Content updated; ordered program workouts are persisted through an internal program level}, '403': {description: Foreign owner}}
   /api/v1/coach/{kind}/{id}/{action}:
     post:
       summary: Publish, unpublish, archive, restore, or duplicate content

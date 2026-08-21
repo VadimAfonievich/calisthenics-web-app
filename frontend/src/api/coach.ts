@@ -93,11 +93,17 @@ export type BuilderInput = {
   exercises?: BuilderExercise[];
   levels?: BuilderLevel[];
   requirements?: string[];
+  workouts?: ProgramWorkout[];
+  sort_order?: number;
 };
+export type ProgramWorkout = { workout_id: string; sort_order: number };
 export type Option = {
   id: string;
   name: string;
   status?: "draft" | "published" | "archived";
+  difficulty?: string;
+  minutes?: number;
+  sort_order?: number;
   owner_user_id?: string;
   parent_id?: string;
 };

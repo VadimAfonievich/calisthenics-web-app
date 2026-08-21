@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   blockNames,
   kinds,
+  moveProgramWorkout,
+  numericValue,
   shouldLeave,
   workoutTarget,
   validateBuilder,
@@ -25,6 +27,27 @@ describe("Coach authoring UX", () => {
     expect(shouldLeave(true, ask)).toBe(false);
     expect(ask).toHaveBeenCalled();
     expect(shouldLeave(false, ask)).toBe(true);
+  });
+});
+describe("numeric inputs", () => {
+  it("keeps an erased value empty and does not prefix the next digit with zero", () => {
+    expect(numericValue("")).toBeUndefined();
+    expect(numericValue("5")).toBe(5);
+    expect(String(numericValue("5"))).toBe("5");
+  });
+});
+describe("program workout ordering", () => {
+  const workouts = [
+    { workout_id: "a", sort_order: 0 },
+    { workout_id: "b", sort_order: 1 },
+    { workout_id: "c", sort_order: 2 },
+  ];
+  it("reorders workouts and persists contiguous sort order", () => {
+    expect(moveProgramWorkout(workouts, 2, -1)).toEqual([
+      { workout_id: "a", sort_order: 0 },
+      { workout_id: "c", sort_order: 1 },
+      { workout_id: "b", sort_order: 2 },
+    ]);
   });
 });
 describe("workout targets", () => {

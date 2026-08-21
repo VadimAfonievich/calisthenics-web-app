@@ -6,6 +6,7 @@ import (
 	coachsvc "github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/coach"
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"github.com/go-chi/chi/v5"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -69,6 +70,7 @@ func coachErr(w http.ResponseWriter, e error) {
 	case errors.Is(e, coachsvc.ErrInvalid):
 		writeError(w, 400, "INVALID_INPUT", "Проверьте заполненные поля и выбранные значения")
 	default:
+		log.Printf("coach studio request failed: %v", e)
 		writeError(w, 500, "COACH_STUDIO_ERROR", "Coach Studio request failed")
 	}
 }
