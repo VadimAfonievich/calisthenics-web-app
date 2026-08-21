@@ -298,7 +298,7 @@ func (s *Service) Calendar(ctx context.Context, user, from, to string) ([]Occurr
 		return nil, e
 	}
 	today := time.Now().In(loc).Format("2006-01-02")
-	rows, e := s.pool.Query(ctx, `SELECT s.id::text,s.workout_id::text,w.title,to_char(s.preferred_time,'HH24:MI'),s.start_date::text,s.end_date::text,p.category,p.difficulty,w.estimated_minutes,array_agg(d.weekday) FROM user_training_schedules s JOIN user_training_schedule_days d ON d.schedule_id=s.id JOIN workouts w ON w.id=s.workout_id JOIN programs p ON p.id=w.program_id WHERE s.user_id=$1::uuid AND s.active AND s.start_date<=$3::date AND (s.end_date IS NULL OR s.end_date>=$2::date) GROUP BY s.id,w.id,p.id`, user, from, to)
+	rows, e := s.pool.Query(ctx, `SELECT s.id::text,s.workout_id::text,w.title,to_char(s.preferred_time,'HH24:MI'),s.start_date::text,s.end_date::text,w.category,w.difficulty,w.estimated_minutes,array_agg(d.weekday) FROM user_training_schedules s JOIN user_training_schedule_days d ON d.schedule_id=s.id JOIN workouts w ON w.id=s.workout_id WHERE s.user_id=$1::uuid AND s.active AND s.start_date<=$3::date AND (s.end_date IS NULL OR s.end_date>=$2::date) GROUP BY s.id,w.id`, user, from, to)
 	if e != nil {
 		return nil, e
 	}
@@ -331,7 +331,7 @@ func (s *Service) Calendar(ctx context.Context, user, from, to string) ([]Occurr
 			out = append(out, Occurrence{Date: ds, Time: tm, WorkoutID: wid, WorkoutTitle: title, ScheduleID: &id, Status: status, Category: cat, Difficulty: diff, EstimatedMinutes: mins})
 		}
 	}
-	prows, e := s.pool.Query(ctx, `SELECT pw.id::text,pw.workout_id::text,w.title,pw.scheduled_date::text,to_char(pw.scheduled_time,'HH24:MI'),pw.source_schedule_id::text,pw.status,p.category,p.difficulty,w.estimated_minutes,ws.id::text,ws.duration_seconds,ws.xp_earned,ws.completed_at FROM user_planned_workouts pw JOIN workouts w ON w.id=pw.workout_id JOIN programs p ON p.id=w.program_id LEFT JOIN workout_sessions ws ON ws.planned_workout_id=pw.id AND ws.status='completed' WHERE pw.user_id=$1::uuid AND pw.scheduled_date BETWEEN $2::date AND $3::date`, user, from, to)
+	prows, e := s.pool.Query(ctx, `SELECT pw.id::text,pw.workout_id::text,w.title,pw.scheduled_date::text,to_char(pw.scheduled_time,'HH24:MI'),pw.source_schedule_id::text,pw.status,w.category,w.difficulty,w.estimated_minutes,ws.id::text,ws.duration_seconds,ws.xp_earned,ws.completed_at FROM user_planned_workouts pw JOIN workouts w ON w.id=pw.workout_id LEFT JOIN workout_sessions ws ON ws.planned_workout_id=pw.id AND ws.status='completed' WHERE pw.user_id=$1::uuid AND pw.scheduled_date BETWEEN $2::date AND $3::date`, user, from, to)
 	if e != nil {
 		return nil, e
 	}

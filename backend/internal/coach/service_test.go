@@ -88,10 +88,18 @@ func TestBodyEntityIDsAreValidatedBeforeSQL(t *testing.T) {
 	}
 }
 
-func TestWorkoutListJoinsProgramDifficulty(t *testing.T) {
+func TestWorkoutListUsesStandaloneDifficulty(t *testing.T) {
 	workouts := tables["workouts"]
-	if workouts.difficulty != "difficulty" || !strings.Contains(workouts.listFrom, "JOIN programs") {
-		t.Fatalf("workout list must derive difficulty from program: %#v", workouts)
+	if workouts.difficulty != "difficulty" || workouts.listFrom != "workouts" {
+		t.Fatalf("workout list must include standalone rows: %#v", workouts)
+	}
+}
+
+func TestStandaloneWorkoutValidation(t *testing.T) {
+	reps := 10
+	in := BuilderInput{Title: "Standalone", Description: "Plan", Difficulty: "beginner", Category: "strength", EstimatedMinutes: 20, Exercises: []BuilderExercise{{ExerciseID: "10000000-0000-0000-0000-000000000002", Sets: 3, TargetReps: &reps, RestSeconds: 60, SortOrder: 0}}}
+	if err := validateWorkoutInput(in); err != nil {
+		t.Fatalf("standalone workout rejected: %v", err)
 	}
 }
 

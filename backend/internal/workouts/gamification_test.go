@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+func TestWarmupDoesNotCountAsFullWorkout(t *testing.T) {
+	if countsAsFullWorkout("warmup") || !countsAsFullWorkout("strength") {
+		t.Fatal("warmup gamification classification is incorrect")
+	}
+}
+
 func TestNextStreak(t *testing.T) {
 	today := time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)
 	yesterday := today.AddDate(0, 0, -1)

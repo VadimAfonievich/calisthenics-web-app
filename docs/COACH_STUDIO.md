@@ -16,7 +16,11 @@ Lesson JSON blocks are presented with human labels and simple up/down ordering. 
 
 ## Relationships and independent lifecycle
 
-The authoring dependency direction is `Exercise → Workout → Program → Skill`. A workout stores ordered exercise rows (sets, repetitions XOR duration, rest, notes). In the Coach MVP, a program is presented as an ordered workout list. The service keeps one internal `program_level` for schema compatibility and assigns selected coach-owned workouts to it; levels are not exposed as an authoring concept. A skill level can link to a program level, and a skill can require other skills.
+The authoring dependency direction is `Exercise → Workout ← Program → Skill`. A workout is standalone and stores its own difficulty plus ordered exercise rows (sets, repetitions XOR duration, rest, notes); its editor does not select a program, level, or day. A program owns composition: its editor selects and orders existing workouts, and the service maintains nullable legacy `program_id`, `program_level_id`, and `day_number` fields for compatibility. The current schema supports one program assignment per workout. Removing a workout from a program makes it standalone without deleting it. A skill level can link to a program level, and a skill can require other skills.
+
+A workout can offer a reusable standard warmup with `warmup_enabled` (true by default outside the `warmup` category). Warmup exercises are never copied into the main workout. The published `category='warmup'` row marked `is_default_warmup` is returned as runtime preview metadata. Completing a warmup records exercise/activity time, but does not increment full-workout count, streak, workout achievements, progression criteria, or XP.
+
+The optional Voice Coach wraps browser Speech Synthesis rather than calling it throughout player components. It uses `ru-RU`, follows the same visual `remaining` state for final 5-second timed/rest announcements, cancels obsolete speech on player actions, and falls back silently to visual countdown plus Telegram haptics. The user preference is local under `calisthenics_voice_coach_enabled` and defaults on; the player provides a test action initiated by user gesture.
 
 Skills use the existing `skills.sort_order` as an explicit display position. The Coach editor expresses it as “После какого навыка?”, while prerequisites remain a separate dependency concept. Student queries order by `sort_order`, then name and ID for deterministic ties.
 

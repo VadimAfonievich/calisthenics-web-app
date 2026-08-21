@@ -96,6 +96,7 @@ export type BuilderInput = {
   requirements?: string[];
   workouts?: ProgramWorkout[];
   sort_order?: number;
+  warmup_enabled?: boolean;
 };
 export type ProgramWorkout = { workout_id: string; sort_order: number };
 export type Option = {

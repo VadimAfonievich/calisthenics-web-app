@@ -36,6 +36,7 @@ import {
 import { useSessionStore } from "../store/session";
 import { listPrograms } from "../api/programs";
 import { listSkills } from "../api/skills";
+import {VoiceCoach,saveVoiceCoachPreference,voiceCoachPreference} from "../voiceCoach";
 
 const Notice = () => (
   <div className="empty-state">
@@ -119,6 +120,10 @@ export function WorkoutCatalogPage() {
           </button>
         ))}
       </section>
+      {!selected && <section className="stack prominent-programs">
+        <div className="section-heading"><h3>Программы</h3><Link to="/programs">Все программы →</Link></div>
+        {programs.data?.programs.slice(0,3).map(p=><Link className="workout-card" to={`/programs/${p.id}`} key={p.id}><h3>{p.name}</h3><p>{p.description}</p><footer><b>{p.workout_count} тренировок</b></footer></Link>)}
+      </section>}
       {!Object.keys(grouped).length && (
         <div className="empty-state compact">
           <h3>Опубликованных тренировок пока нет</h3>
@@ -137,7 +142,7 @@ export function WorkoutCatalogPage() {
               <Link className="workout-card" to={route} key={w.id}>
                 <div>
                   <p className="eyebrow">
-                    {w.program_name} · {w.difficulty}
+                    {w.program_name ? `${w.program_name} · ` : ""}{w.difficulty}
                   </p>
                   <h3>{w.title}</h3>
                   <p>{w.description}</p>
@@ -160,25 +165,6 @@ export function WorkoutCatalogPage() {
       ))}
       {!selected && (
         <>
-          <section className="stack">
-            <div className="section-heading">
-              <h3>Программы</h3>
-              <Link to="/programs">Все программы →</Link>
-            </div>
-            {programs.data?.programs.slice(0, 3).map((p) => (
-              <Link
-                className="workout-card"
-                to={`/programs/${p.id}`}
-                key={p.id}
-              >
-                <h3>{p.name}</h3>
-                <p>{p.description}</p>
-                <footer>
-                  <b>{p.workout_count} тренировок</b>
-                </footer>
-              </Link>
-            ))}
-          </section>
           <section className="stack">
             <div className="section-heading">
               <h3>Освоение элементов</h3>
@@ -219,22 +205,23 @@ export function WorkoutPreviewPage() {
     enabled: !!token && valid,
   });
   const begin = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({workoutID,next,usePlanned}:{workoutID:string;next?:string;usePlanned:boolean}) => {
       let planned = params.get("planned_workout_id") ?? undefined;
       const date = params.get("scheduled_date"),
         schedule = params.get("schedule_id") ?? undefined;
-      if (!planned && date) {
+      if ((usePlanned || next) && !planned && date) {
         const result = await createPlanned(token!, {
-          workout_id: id,
+          workout_id: next ?? workoutID,
           scheduled_date: date,
           scheduled_time: params.get("scheduled_time") ?? undefined,
           source_schedule_id: schedule,
         });
         planned = result.planned_workout.id;
       }
-      return start(token!, id, planned);
+      const result=await start(token!, workoutID, usePlanned?planned:undefined);
+      return {result,next,nextPlanned:next?planned:undefined};
     },
-    onSuccess: (r) => navigate(`/workout-session/${r.session.id}`),
+    onSuccess: ({result,next,nextPlanned}) => {const nextParams=new URLSearchParams();if(next)nextParams.set("next",next);if(nextPlanned)nextParams.set("next_planned",nextPlanned);navigate(`/workout-session/${result.session.id}${nextParams.size?`?${nextParams}`:""}`)},
   });
   if (!token) return <Notice />;
   if (!valid)
@@ -256,7 +243,7 @@ export function WorkoutPreviewPage() {
       )}
       <section className="hero-card">
         <p className="eyebrow">
-          {w.program_name} · {w.difficulty}
+          {w.program_name ? `${w.program_name} · ` : ""}{w.difficulty}
         </p>
         <h2>{w.title}</h2>
         <span>{w.description}</span>
@@ -268,6 +255,13 @@ export function WorkoutPreviewPage() {
       <Link className="text-link" to={`/calendar?workout=${w.id}`}>
         Добавить в расписание →
       </Link>
+      {w.warmup_enabled && w.default_warmup && (
+        <section className="card warmup-choice stack">
+          <div><p className="eyebrow">ПЕРЕД ТРЕНИРОВКОЙ</p><h3>{w.default_warmup.title}</h3><span>Разминка · ~{w.default_warmup.estimated_minutes} минут</span></div>
+          <button className="primary-button" disabled={begin.isPending} onClick={()=>begin.mutate({workoutID:w.default_warmup!.id,next:w.id,usePlanned:false})}>Начать с разминки</button>
+          <button disabled={begin.isPending} onClick={()=>begin.mutate({workoutID:w.id,usePlanned:true})}>Начать без разминки</button>
+        </section>
+      )}
       <section className="stack">
         <h3>План тренировки</h3>
         {w.exercises.map((x, i) => (
@@ -282,13 +276,13 @@ export function WorkoutPreviewPage() {
           </article>
         ))}
       </section>
-      <button
+      {!(w.warmup_enabled && w.default_warmup) && <button
         className="primary-button workout-cta"
         disabled={begin.isPending}
-        onClick={() => begin.mutate()}
+        onClick={() => begin.mutate({workoutID:w.id,usePlanned:true})}
       >
         {begin.isPending ? "Начинаем…" : "Начать тренировку"}
-      </button>
+      </button>}
       {begin.isError && (
         <p className="notice error">
           {begin.error instanceof Error
@@ -305,7 +299,11 @@ export function WorkoutPlayerPage() {
   const { id = "" } = useParams(),
     token = useSessionStore((s) => s.accessToken),
     qc = useQueryClient(),
+    navigate = useNavigate(),
+    [search] = useSearchParams(),
     valid = isValidEntityID(id);
+  const nextWorkout=search.get("next")??"";
+  const nextPlanned=search.get("next_planned")??undefined;
   const query = useQuery({
     queryKey: ["workout-session", id],
     queryFn: () => getSession(token!, id),
@@ -317,8 +315,12 @@ export function WorkoutPlayerPage() {
     [now, setNow] = useState(Date.now()),
     [remaining, setRemaining] = useState(0),
     [rest, setRest] = useState(0),
-    [actualReps, setActualReps] = useState(0);
+    [actualReps, setActualReps] = useState(0),
+    [voiceEnabled,setVoiceEnabled]=useState(voiceCoachPreference);
   const timerStarted = useRef(0);
+  const phaseDeadline=useRef(0);
+  const voice=useRef(new VoiceCoach(voiceEnabled));
+  useEffect(()=>()=>voice.current.cancel(),[]);
   useEffect(() => {
     const i = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(i);
@@ -335,17 +337,28 @@ export function WorkoutPlayerPage() {
       setActualReps(current.exercise.target_reps);
   }, [current?.exercise.id, current?.setNumber]);
   useEffect(() => {
-    if ((phase !== "timer" && phase !== "rest") || remaining <= 0) return;
-    const i = setInterval(() => setRemaining((v) => Math.max(0, v - 1)), 1000);
-    return () => clearInterval(i);
-  }, [phase, remaining]);
+    if ((phase !== "timer" && phase !== "rest") || !phaseDeadline.current) return;
+    const next=Math.max(0,Math.ceil((phaseDeadline.current-now)/1000));
+    setRemaining(current=>current===next?current:next);
+  }, [phase,now]);
   useEffect(() => {
     if (phase === "timer" && remaining === 0 && timerStarted.current) {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
         "success",
       );
     }
-    if (phase === "rest" && remaining === 0) setPhase("set");
+    if (phase === "rest" && remaining>0 && remaining<=5) voice.current.restCountdown(remaining);
+    if (phase === "timer" && remaining>0 && remaining<=5) voice.current.countdown(phase,remaining);
+    if (phase === "timer" && remaining===0 && timerStarted.current) voice.current.cancel();
+    if ((phase === "timer" || phase === "rest") && remaining>0 && remaining<=5) {
+      if (remaining<=3) window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+    }
+    if (phase === "rest" && remaining === 0) {
+      voice.current.cancel();
+      voice.current.restCountdown(0);
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+      setPhase("set");
+    }
   }, [phase, remaining]);
   const record = useMutation({
     mutationFn: (payload: { reps?: number; duration_seconds?: number }) =>
@@ -356,14 +369,16 @@ export function WorkoutPlayerPage() {
         completed: true,
       }),
     onSuccess: (_, payload) => {
+      voice.current.cancel();
+      voice.current.announceSetComplete();
       const item = {
         exercise_id: current!.exercise.id,
         set_number: current!.setNumber,
         ...payload,
         completed: true,
       };
-      setDataSets((s) => [
-        ...s.filter(
+      const updated = [
+        ...dataSets.filter(
           (x) =>
             !(
               x.exercise_id === item.exercise_id &&
@@ -371,24 +386,36 @@ export function WorkoutPlayerPage() {
             ),
         ),
         item,
-      ]);
+      ];
+      setDataSets(updated);
       timerStarted.current = 0;
       const final =
         completedCount(dataSets) + 1 >= totalSets(query.data!.workout);
       if (final) setPhase("done");
       else if (current!.exercise.rest_seconds > 0) {
+        const upcoming=nextSet(query.data!.workout,updated);
+        if (upcoming && upcoming.exercise.id!==current!.exercise.id) voice.current.announceNextExercise(upcoming.exercise.name);
+        voice.current.announceRest(current!.exercise.rest_seconds);
         setRest(current!.exercise.rest_seconds);
         setRemaining(current!.exercise.rest_seconds);
+        phaseDeadline.current=Date.now()+current!.exercise.rest_seconds*1000;
         setPhase("rest");
-      } else setPhase("set");
+      } else {
+        const upcoming=nextSet(query.data!.workout,updated);
+        if (upcoming && upcoming.exercise.id!==current!.exercise.id) voice.current.announceNextExercise(upcoming.exercise.name);
+        setPhase("set");
+      }
     },
   });
   const finish = useMutation({
     mutationFn: () =>
       complete(token!, id, elapsedSeconds(query.data!.session.started_at)),
-    onSuccess: () => {
+    onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ["progress"] });
       qc.invalidateQueries({ queryKey: ["workouts"] });
+      if (isValidEntityID(nextWorkout)) {
+        try { const next=await start(token!,nextWorkout,isValidEntityID(nextPlanned)?nextPlanned:undefined); navigate(`/workout-session/${next.session.id}`); } catch { navigate(`/workouts/${nextWorkout}`); }
+      }
     },
   });
   if (!token) return <Notice />;
@@ -450,6 +477,11 @@ export function WorkoutPlayerPage() {
         </div>
         <b>{formatClock(elapsed)}</b>
       </header>
+      <div className="voice-controls">
+        <button onClick={()=>{const enabled=!voiceEnabled;setVoiceEnabled(enabled);saveVoiceCoachPreference(enabled);voice.current.setEnabled(enabled);}} aria-pressed={voiceEnabled}>🔊 Голос: {voiceEnabled?"Вкл":"Выкл"}</button>
+        <button disabled={!voice.current.isSupported()||!voiceEnabled} onClick={()=>voice.current.test()}>Проверить голос</button>
+        {!voice.current.isSupported()&&<small>Голосовые подсказки недоступны на этом устройстве.</small>}
+      </div>
       <div className="progress-track">
         <i style={{ width: `${progressPercent(workout, dataSets)}%` }} />
       </div>
@@ -471,10 +503,12 @@ export function WorkoutPlayerPage() {
           next={current.exercise}
           exerciseFinished={current.setNumber === 1}
           onSkip={() => {
+            voice.current.cancel();
+            phaseDeadline.current=0;
             setRemaining(0);
             setPhase("set");
           }}
-          onAdd={() => setRemaining(addRestSeconds)}
+          onAdd={() => {const next=addRestSeconds(remaining);phaseDeadline.current=Date.now()+next*1000;setRemaining(next)}}
         />
       ) : phase === "done" || !current ? (
         <section className="player-focus">
@@ -498,8 +532,11 @@ export function WorkoutPlayerPage() {
           onMinus={() => setActualReps((v) => Math.max(0, v - 1))}
           onPlus={() => setActualReps((v) => v + 1)}
           onStart={() => {
+            voice.current.cancel();
             timerStarted.current = Date.now();
-            setRemaining(current.exercise.target_duration_seconds ?? 0);
+            const seconds=current.exercise.target_duration_seconds ?? 0;
+            phaseDeadline.current=Date.now()+seconds*1000;
+            setRemaining(seconds);
             setPhase("timer");
           }}
           onComplete={() =>

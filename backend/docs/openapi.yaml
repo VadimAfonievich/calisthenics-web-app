@@ -243,7 +243,7 @@ paths:
     post:
       summary: Create coach-owned content with a server-generated UUID and slug where applicable
       security: [{bearerAuth: []}]
-      responses: {'201': {description: Draft created; programs accept ordered workouts and skills accept sort_order}, '400': {description: Validation failed}}
+      responses: {'201': {description: Draft created; workouts are standalone and programs accept ordered workout references}, '400': {description: Validation failed}}
   /api/v1/coach/{kind}/{id}:
     get:
       summary: Load owned or read-only system content into an editor
@@ -398,6 +398,17 @@ components:
         category: {type: string, enum: [warmup, morning, strength, skill]}
         estimated_minutes: {type: integer, minimum: 1, maximum: 1440}
         sort_order: {type: integer, minimum: 0}
+    CoachWorkoutInput:
+      type: object
+      required: [title, description, difficulty, category, estimated_minutes, exercises]
+      properties:
+        title: {type: string}
+        description: {type: string}
+        difficulty: {type: string, enum: [beginner, intermediate, advanced]}
+        category: {type: string, enum: [warmup, morning, strength, skill]}
+        estimated_minutes: {type: integer, minimum: 1, maximum: 1440}
+        warmup_enabled: {type: boolean, default: true, description: Offers the separate default warmup at runtime; forced false for warmup category}
+        exercises: {type: array, items: {$ref: '#/components/schemas/AdminWorkoutExerciseInput'}}
     AdminWorkoutExerciseInput:
       type: object
       required: [exercise_id, sets, rest_seconds]

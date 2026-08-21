@@ -134,6 +134,7 @@ type BuilderInput struct {
 	Requirements        []string          `json:"requirements"`
 	Workouts            []ProgramWorkout  `json:"workouts"`
 	SortOrder           int               `json:"sort_order"`
+	WarmupEnabled       *bool             `json:"warmup_enabled,omitempty"`
 }
 type ProgramWorkout struct {
 	WorkoutID string `json:"workout_id"`
@@ -241,7 +242,7 @@ var tables = map[string]struct{ table, name, slug, listFrom, difficulty string }
 	"lessons":   {"lessons", "title", "slug", "lessons", "difficulty"},
 	"exercises": {"exercises", "name", "slug", "exercises", "difficulty"},
 	"programs":  {"programs", "name", "slug", "programs", "difficulty"},
-	"workouts":  {"workouts", "title", "''", "(SELECT w.*,p.difficulty FROM workouts w JOIN programs p ON p.id=w.program_id) workouts", "difficulty"},
+	"workouts":  {"workouts", "title", "''", "workouts", "difficulty"},
 	"skills":    {"skills", "name", "code", "skills", "difficulty"},
 }
 
@@ -341,7 +342,7 @@ func (s *Service) Options(ctx context.Context, user string, role Role) (Options,
 		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM exercises WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Exercises, true},
 		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM programs WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Programs, true},
 		{`SELECT pl.id::text,p.name||' · '||pl.title,p.status,pl.difficulty,0,pl.sort_order,p.owner_user_id::text,p.id::text FROM program_levels pl JOIN programs p ON p.id=pl.program_id WHERE p.status<>'archived' AND ($1 OR p.owner_user_id=$2::uuid OR p.owner_user_id IS NULL) ORDER BY p.name,pl.sort_order`, &out.ProgramLevels, true},
-		{`SELECT w.id::text,w.title,w.status,p.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,w.program_level_id::text FROM workouts w JOIN programs p ON p.id=w.program_id WHERE w.status<>'archived' AND ($1 OR w.owner_user_id=$2::uuid OR w.owner_user_id IS NULL) ORDER BY w.title`, &out.Workouts, true},
+		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,w.program_level_id::text FROM workouts w WHERE w.status<>'archived' AND ($1 OR w.owner_user_id=$2::uuid OR w.owner_user_id IS NULL) ORDER BY w.title`, &out.Workouts, true},
 		{`SELECT id::text,name,status,difficulty,0,sort_order,owner_user_id::text,NULL::text FROM skills WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY CASE WHEN sort_order=0 THEN 2147483647 ELSE sort_order END,name,id`, &out.Skills, true},
 		{`SELECT id::text,CASE WHEN type='image' THEN 'Фото: ' ELSE 'Видео: ' END||original_filename FROM media_assets WHERE status='ready' AND ($1 OR owner_user_id=$2::uuid) ORDER BY created_at DESC`, &out.Media, false},
 	}
@@ -484,12 +485,6 @@ func validateWorkoutInput(in BuilderInput) error {
 	if in.EstimatedMinutes < 1 {
 		return invalid("Укажите длительность тренировки.")
 	}
-	if in.DayNumber < 1 {
-		return invalid("Укажите номер дня тренировки в программе.")
-	}
-	if !validID(in.ProgramID) {
-		return invalid("Выберите программу.")
-	}
 	if !oneOf(in.Category, "warmup", "morning", "strength", "skill") {
 		return invalid("Выберите категорию тренировки.")
 	}
@@ -508,8 +503,8 @@ func validateWorkoutInput(in BuilderInput) error {
 			return invalid(fmt.Sprintf("У упражнения в позиции %d некорректное время отдыха.", position))
 		}
 	}
-	if !validOptionalID(in.ProgramLevelID) || !validExercises(in.Exercises) {
-		return invalid("Проверьте порядок упражнений и выбранный уровень программы.")
+	if !validExercises(in.Exercises) {
+		return invalid("Проверьте порядок упражнений.")
 	}
 	return nil
 }
@@ -609,17 +604,13 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			var levelID string
 			e = tx.QueryRow(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order) VALUES($1::uuid,1,'Тренировки','Внутренний уровень программы',$2,'none',0,0) ON CONFLICT(program_id,level_number) DO UPDATE SET difficulty=EXCLUDED.difficulty RETURNING id::text`, out, in.Difficulty).Scan(&levelID)
 			if e == nil {
-				_, e = tx.Exec(ctx, `UPDATE workouts SET program_level_id=NULL WHERE program_id=$1::uuid AND program_level_id=$2::uuid`, out, levelID)
-			}
-			var maxDay int
-			if e == nil {
-				e = tx.QueryRow(ctx, `SELECT COALESCE(max(day_number),0) FROM workouts WHERE program_id=$1::uuid`, out).Scan(&maxDay)
+				_, e = tx.Exec(ctx, `UPDATE workouts SET program_id=NULL,program_level_id=NULL,day_number=NULL,sort_order=0 WHERE program_id=$1::uuid`, out)
 			}
 			for index, workout := range in.Workouts {
 				if e != nil {
 					break
 				}
-				tag, updateErr := tx.Exec(ctx, `UPDATE workouts SET program_id=$1::uuid,program_level_id=$2::uuid,day_number=$3,sort_order=$4 WHERE id=$5::uuid AND ($6 OR owner_user_id=$7::uuid)`, out, levelID, maxDay+index+1, workout.SortOrder, workout.WorkoutID, role.CanManageAll(), user)
+				tag, updateErr := tx.Exec(ctx, `UPDATE workouts SET program_id=$1::uuid,program_level_id=$2::uuid,day_number=$3,sort_order=$4 WHERE id=$5::uuid AND ($6 OR owner_user_id=$7::uuid)`, out, levelID, index+1, workout.SortOrder, workout.WorkoutID, role.CanManageAll(), user)
 				e = updateErr
 				if e == nil && tag.RowsAffected() == 0 {
 					return "", ErrForbidden
@@ -627,17 +618,14 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			}
 		}
 	case "workouts":
-		var dayExists bool
-		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workouts WHERE program_id=$1::uuid AND day_number=$2 AND ($3::uuid IS NULL OR id<>$3::uuid))`, in.ProgramID, in.DayNumber, id).Scan(&dayExists); e != nil {
-			return "", e
-		}
-		if dayExists {
-			return "", ErrWorkoutDayInUse
+		warmupEnabled := in.Category != "warmup"
+		if in.WarmupEnabled != nil {
+			warmupEnabled = *in.WarmupEnabled && in.Category != "warmup"
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO workouts(program_id,program_level_id,day_number,title,description,estimated_minutes,owner_user_id,status,cover_media_id,category) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,'draft',$8::uuid,$9) RETURNING id::text`, in.ProgramID, in.ProgramLevelID, in.DayNumber, in.Title, in.Description, in.EstimatedMinutes, user, in.CoverMediaID, in.Category).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,owner_user_id,status,cover_media_id,category,warmup_enabled) VALUES($1,$2,$3,$4,$5::uuid,'draft',$6::uuid,$7,$8) RETURNING id::text`, in.Title, in.Description, in.Difficulty, in.EstimatedMinutes, user, in.CoverMediaID, in.Category, warmupEnabled).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE workouts SET program_id=$4::uuid,program_level_id=$5::uuid,day_number=$6,title=$7,description=$8,estimated_minutes=$9,cover_media_id=$10::uuid,category=$11 WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.ProgramID, in.ProgramLevelID, in.DayNumber, in.Title, in.Description, in.EstimatedMinutes, in.CoverMediaID, in.Category).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE workouts SET title=$4,description=$5,difficulty=$6,estimated_minutes=$7,cover_media_id=$8::uuid,category=$9,warmup_enabled=$10,is_default_warmup=CASE WHEN $9='warmup' THEN is_default_warmup ELSE false END WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Title, in.Description, in.Difficulty, in.EstimatedMinutes, in.CoverMediaID, in.Category, warmupEnabled).Scan(&out)
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, `DELETE FROM workout_exercises WHERE workout_id=$1::uuid`, out)
@@ -878,7 +866,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		defer tx.Rollback(ctx)
 		var out string
-		e = tx.QueryRow(ctx, `INSERT INTO workouts(program_id,program_level_id,day_number,title,description,estimated_minutes,sort_order,owner_user_id,status,cover_media_id,category) SELECT program_id,program_level_id,(SELECT COALESCE(max(day_number),0)+1 FROM workouts w2 WHERE w2.program_id=w.program_id),title||' — копия',description,estimated_minutes,sort_order,$2::uuid,'draft',cover_media_id,category FROM workouts w WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,sort_order,owner_user_id,status,cover_media_id,category,warmup_enabled) SELECT title||' — копия',description,difficulty,estimated_minutes,0,$2::uuid,'draft',cover_media_id,category,warmup_enabled FROM workouts w WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}

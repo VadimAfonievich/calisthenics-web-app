@@ -61,7 +61,7 @@ func (s *Service) Get(ctx context.Context, id string) (Program, error) {
 	if err != nil {
 		return Program{}, err
 	}
-	rows, e := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,p.difficulty,w.category FROM workouts w JOIN programs p ON p.id=w.program_id WHERE w.program_id=$1::uuid AND w.status='published' ORDER BY w.sort_order,w.day_number,w.id`, id)
+	rows, e := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,w.category FROM workouts w WHERE w.program_id=$1::uuid AND w.status='published' ORDER BY w.sort_order,w.day_number,w.id`, id)
 	if e != nil {
 		return Program{}, e
 	}

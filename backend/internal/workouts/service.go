@@ -11,6 +11,8 @@ import (
 
 const CompletionXP = 100
 
+func countsAsFullWorkout(category string) bool { return category != "warmup" }
+
 var (
 	ErrNotFound  = errors.New("workout not found")
 	ErrForbidden = errors.New("session forbidden")
@@ -31,10 +33,18 @@ type Workout struct {
 	Description   string     `json:"description"`
 	Minutes       int32      `json:"estimated_minutes"`
 	Difficulty    string     `json:"difficulty"`
-	ProgramID     string     `json:"program_id"`
-	ProgramName   string     `json:"program_name"`
+	ProgramID     string     `json:"program_id,omitempty"`
+	ProgramName   string     `json:"program_name,omitempty"`
+	Category      string     `json:"category"`
+	WarmupEnabled bool       `json:"warmup_enabled"`
+	DefaultWarmup *Warmup    `json:"default_warmup,omitempty"`
 	CoverMediaURL string     `json:"cover_media_url,omitempty"`
 	Exercises     []Exercise `json:"exercises"`
+}
+type Warmup struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Minutes int32  `json:"estimated_minutes"`
 }
 type CatalogItem struct {
 	ID              string  `json:"id"`
@@ -43,9 +53,10 @@ type CatalogItem struct {
 	Minutes         int32   `json:"estimated_minutes"`
 	Difficulty      string  `json:"difficulty"`
 	ExerciseCount   int32   `json:"exercise_count"`
-	ProgramID       string  `json:"program_id"`
-	ProgramName     string  `json:"program_name"`
+	ProgramID       string  `json:"program_id,omitempty"`
+	ProgramName     string  `json:"program_name,omitempty"`
 	Category        string  `json:"category"`
+	WarmupEnabled   bool    `json:"warmup_enabled"`
 	Status          *string `json:"status,omitempty"`
 	ActiveSessionID *string `json:"active_session_id,omitempty"`
 }
@@ -84,12 +95,21 @@ type Service struct{ pool *pgxpool.Pool }
 func NewService(p *pgxpool.Pool) *Service { return &Service{p} }
 func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	var w Workout
-	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,p.difficulty,p.id::text,p.name,COALESCE(m.url,'') FROM workouts w JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id WHERE w.id=$1::uuid AND w.status='published'`, id).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName, &w.CoverMediaURL)
+	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,COALESCE(m.url,'') FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id WHERE w.id=$1::uuid AND w.status='published'`, id).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName, &w.Category, &w.WarmupEnabled, &w.CoverMediaURL)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return w, ErrNotFound
 	}
 	if e != nil {
 		return w, e
+	}
+	if w.WarmupEnabled && w.Category != "warmup" {
+		var warmup Warmup
+		e = s.pool.QueryRow(ctx, `SELECT id::text,title,estimated_minutes FROM workouts WHERE category='warmup' AND status='published' ORDER BY is_default_warmup DESC,sort_order,id LIMIT 1`).Scan(&warmup.ID, &warmup.Title, &warmup.Minutes)
+		if e == nil {
+			w.DefaultWarmup = &warmup
+		} else if !errors.Is(e, pgx.ErrNoRows) {
+			return w, e
+		}
 	}
 	rows, e := s.pool.Query(ctx, `SELECT we.exercise_id::text,e.name,we.sets,we.target_reps,we.target_duration_seconds,we.rest_seconds FROM workout_exercises we JOIN exercises e ON e.id=we.exercise_id WHERE we.workout_id=$1::uuid ORDER BY we.sort_order`, id)
 	if e != nil {
@@ -106,7 +126,7 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	return w, rows.Err()
 }
 func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error) {
-	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,p.difficulty,COUNT(we.id)::int,p.id::text,p.name,w.category,active.status,active.id::text FROM workouts w JOIN programs p ON p.id=w.program_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE w.status='published' GROUP BY w.id,p.id,active.status,active.id ORDER BY w.category,p.difficulty,p.name,w.sort_order,w.day_number`, userID)
+	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COUNT(we.id)::int,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,active.status,active.id::text FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE w.status='published' GROUP BY w.id,p.id,active.status,active.id ORDER BY w.category,w.difficulty,p.name,w.sort_order,w.day_number NULLS LAST`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +134,7 @@ func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error
 	items := []CatalogItem{}
 	for rows.Next() {
 		var item CatalogItem
-		if err = rows.Scan(&item.ID, &item.Title, &item.Description, &item.Minutes, &item.Difficulty, &item.ExerciseCount, &item.ProgramID, &item.ProgramName, &item.Category, &item.Status, &item.ActiveSessionID); err != nil {
+		if err = rows.Scan(&item.ID, &item.Title, &item.Description, &item.Minutes, &item.Difficulty, &item.ExerciseCount, &item.ProgramID, &item.ProgramName, &item.Category, &item.WarmupEnabled, &item.Status, &item.ActiveSessionID); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -123,7 +143,7 @@ func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error
 }
 func (s *Service) Today(ctx context.Context) (Workout, error) {
 	var id string
-	e := s.pool.QueryRow(ctx, `SELECT w.id::text FROM workouts w JOIN programs p ON p.id=w.program_id WHERE w.status='published' ORDER BY p.difficulty,w.day_number LIMIT 1`).Scan(&id)
+	e := s.pool.QueryRow(ctx, `SELECT w.id::text FROM workouts w WHERE w.status='published' AND w.category<>'warmup' ORDER BY w.difficulty,w.sort_order,w.day_number NULLS LAST LIMIT 1`).Scan(&id)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return Workout{}, ErrNotFound
 	}
@@ -200,7 +220,8 @@ func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (
 	}
 	defer tx.Rollback(ctx)
 	var x Session
-	e = tx.QueryRow(ctx, `SELECT id::text,workout_id::text,status,duration_seconds,xp_earned FROM workout_sessions WHERE id=$1::uuid AND user_id=$2::uuid FOR UPDATE`, sid, u).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP)
+	var category string
+	e = tx.QueryRow(ctx, `SELECT ws.id::text,ws.workout_id::text,ws.status,ws.duration_seconds,ws.xp_earned,w.category FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id WHERE ws.id=$1::uuid AND ws.user_id=$2::uuid FOR UPDATE`, sid, u).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &category)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return x, ErrForbidden
 	}
@@ -244,6 +265,19 @@ func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (
 	_, e = tx.Exec(ctx, `INSERT INTO user_exercise_stats(user_id,exercise_id,total_sets,total_reps,max_reps,total_duration_seconds,max_duration_seconds,last_performed_at) SELECT $2::uuid,exercise_id,COUNT(*)::int,COALESCE(SUM(reps),0)::int,COALESCE(MAX(reps),0)::int,COALESCE(SUM(duration_seconds),0)::bigint,COALESCE(MAX(duration_seconds),0)::int,NOW() FROM exercise_sets WHERE session_id=$1::uuid AND completed GROUP BY exercise_id ON CONFLICT(user_id,exercise_id) DO UPDATE SET total_sets=user_exercise_stats.total_sets+EXCLUDED.total_sets,total_reps=user_exercise_stats.total_reps+EXCLUDED.total_reps,max_reps=GREATEST(user_exercise_stats.max_reps,EXCLUDED.max_reps),total_duration_seconds=user_exercise_stats.total_duration_seconds+EXCLUDED.total_duration_seconds,max_duration_seconds=GREATEST(user_exercise_stats.max_duration_seconds,EXCLUDED.max_duration_seconds),last_performed_at=NOW()`, sid, u)
 	if e != nil {
 		return x, e
+	}
+	if !countsAsFullWorkout(category) {
+		x.XP = 0
+		x.CurrentStreak = current
+		x.UnlockedAchievements = []string{}
+		_, e = tx.Exec(ctx, `UPDATE user_progress SET total_completed_exercises=total_completed_exercises+$3,total_training_seconds=total_training_seconds+$2 WHERE user_id=$1::uuid`, u, duration, completedExercises)
+		if e != nil {
+			return x, fmt.Errorf("update warmup activity: %w", e)
+		}
+		if e = tx.Commit(ctx); e != nil {
+			return x, e
+		}
+		return x, nil
 	}
 	_, e = tx.Exec(ctx, `UPDATE user_progress SET total_workouts=total_workouts+1,total_completed_exercises=total_completed_exercises+$3,total_training_seconds=total_training_seconds+$2 WHERE user_id=$1::uuid`, u, duration, completedExercises)
 	if e != nil {

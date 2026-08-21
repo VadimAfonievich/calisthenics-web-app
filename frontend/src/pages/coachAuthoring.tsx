@@ -428,9 +428,7 @@ export const builderPayload = (
       title: value.title,
       category: value.category,
       estimated_minutes: value.estimated_minutes,
-      day_number: value.day_number,
-      program_id: value.program_id,
-      program_level_id: value.program_level_id,
+      warmup_enabled: value.category === "warmup" ? false : value.warmup_enabled,
       exercises: value.exercises,
     };
   if (kind === "exercises")
@@ -870,8 +868,7 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
         title: "",
         category: "strength",
         estimated_minutes: 20,
-        day_number: 1,
-        program_id: "",
+        warmup_enabled: true,
         exercises: [],
       }
     : {}),
@@ -916,9 +913,6 @@ export function validateBuilder(
       return "Укажите хотя бы одну группу мышц.";
   }
   if (kind === "workouts") {
-    if (!value.program_id) return "Выберите программу.";
-    if (!value.day_number || value.day_number < 1)
-      return "Укажите номер дня программы.";
     if (!value.estimated_minutes || value.estimated_minutes < 1)
       return "Укажите продолжительность тренировки.";
     const exercises = value.exercises ?? [];
@@ -1267,7 +1261,16 @@ function BuilderEditor({
             Категория
             <select
               value={value.category ?? "strength"}
-              onChange={(e) => change({ ...value, category: e.target.value })}
+              onChange={(e) =>
+                change({
+                  ...value,
+                  category: e.target.value,
+                  warmup_enabled:
+                    e.target.value === "warmup"
+                      ? false
+                      : (value.warmup_enabled ?? true),
+                })
+              }
             >
               <option value="warmup">Разминка</option>
               <option value="morning">Зарядка</option>
@@ -1420,7 +1423,7 @@ function BuilderEditor({
     </form>
   );
 }
-function WorkoutFields({
+export function WorkoutFields({
   value,
   change,
   opts,
@@ -1456,57 +1459,6 @@ function WorkoutFields({
   return (
     <>
       <label>
-        Программа
-        <select
-          value={value.program_id}
-          onChange={(e) => change({ ...value, program_id: e.target.value })}
-        >
-          <option value="">Выберите программу</option>
-          {opts?.programs.map((x) => (
-            <option value={x.id} key={x.id}>
-              {optionName(x)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Этап программы
-        <select
-          value={value.program_level_id ?? ""}
-          onChange={(e) =>
-            change({ ...value, program_level_id: e.target.value || undefined })
-          }
-        >
-          <option value="">Без этапа</option>
-          {opts?.program_levels
-            .filter(
-              (x) => !value.program_id || x.parent_id === value.program_id,
-            )
-            .map((x) => (
-              <option value={x.id} key={x.id}>
-                {optionName(x)}
-              </option>
-            ))}
-        </select>
-        <small>
-          Привязка определяет положение тренировки внутри программы.
-        </small>
-      </label>
-      <label>
-        День программы
-        <input
-          type="number"
-          min="1"
-          value={value.day_number ?? ""}
-          onChange={(e) =>
-            change({ ...value, day_number: numericValue(e.target.value) })
-          }
-        />
-        <small>
-          Номер дня должен быть уникальным внутри выбранной программы.
-        </small>
-      </label>
-      <label>
         Продолжительность, минут
         <input
           type="number"
@@ -1520,6 +1472,20 @@ function WorkoutFields({
           }
         />
       </label>
+      {value.category !== "warmup" && (
+        <label className="toggle-field">
+          <span>
+            <b>Разминка перед тренировкой</b>
+            <small>Перед началом будет предложена стандартная разминка.</small>
+          </span>
+          <input
+            aria-label="Разминка перед тренировкой"
+            type="checkbox"
+            checked={value.warmup_enabled ?? true}
+            onChange={(e) => change({...value, warmup_enabled:e.target.checked})}
+          />
+        </label>
+      )}
       <h3>Упражнения</h3>
       {list.map((x, i) => {
         const timed = x.target_duration_seconds !== undefined;

@@ -90,10 +90,8 @@ describe("workout validation", () => {
         exercises: [...base.exercises, { ...base.exercises[0], sort_order: 1 }],
       }),
     ).toContain("дважды"));
-  it("requires an explicit program day", () =>
-    expect(validateBuilder("workouts", { ...base, day_number: 0 })).toContain(
-      "номер дня",
-    ));
+  it("accepts a standalone workout without program fields", () =>
+    expect(validateBuilder("workouts", {...base,program_id:undefined,program_level_id:undefined,day_number:undefined})).toBe(""));
   it("allows an empty workout draft but blocks publishing it", () => {
     const draft = { ...base, exercises: [] };
     expect(validateBuilder("workouts", draft)).toBe("");
@@ -114,7 +112,6 @@ describe("workout update DTO", () => {
       estimated_minutes: 35,
       day_number: 2,
       program_id: "program-id",
-      program_level_id: "level-id",
       exercises: [{
         exercise_id: "exercise-id",
         sets: 4,
@@ -128,11 +125,13 @@ describe("workout update DTO", () => {
       title: "Сила 2",
       category: "strength",
       estimated_minutes: 35,
-      program_level_id: "level-id",
     });
     expect(payload.exercises?.[0]).toMatchObject({target_reps: 12, rest_seconds: 75, notes: "Строгая техника"});
     expect(payload).not.toHaveProperty("id");
     expect(payload).not.toHaveProperty("status");
     expect(payload).not.toHaveProperty("owner_user_id");
+    expect(payload).not.toHaveProperty("program_id");
+    expect(payload).not.toHaveProperty("program_level_id");
+    expect(payload).not.toHaveProperty("day_number");
   });
 });
