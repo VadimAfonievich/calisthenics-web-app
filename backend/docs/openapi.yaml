@@ -154,6 +154,14 @@ paths:
       security: [{bearerAuth: []}]
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses: {'200': {description: Skill detail}, '400': {description: Invalid UUID}, '404': {description: Skill not found}}
+  /api/v1/skills/{id}/criteria/{criterionID}/confirm:
+    post:
+      summary: Idempotently confirm one current-user readiness criterion
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: criterionID, in: path, required: true, schema: {type: string, format: uuid}}
+      responses: {'200': {description: Current mastery state and any one-time reward}, '400': {description: Invalid UUID}, '404': {description: Skill criterion not found}}
   /api/v1/skills/{id}/levels/{level}/complete:
     post:
       summary: Validate and complete a skill level, unlocking the next level
@@ -380,12 +388,14 @@ components:
         published: {type: boolean}
     AdminWorkoutInput:
       type: object
-      required: [program_id, day_number, title, description, estimated_minutes]
+      required: [program_id, day_number, title, description, difficulty, category, estimated_minutes]
       properties:
         program_id: {type: string, format: uuid}
         day_number: {type: integer, minimum: 1}
         title: {type: string}
         description: {type: string}
+        difficulty: {type: string, enum: [beginner, intermediate, advanced]}
+        category: {type: string, enum: [warmup, morning, strength, skill]}
         estimated_minutes: {type: integer, minimum: 1, maximum: 1440}
         sort_order: {type: integer, minimum: 0}
     AdminWorkoutExerciseInput:

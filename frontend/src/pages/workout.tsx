@@ -34,26 +34,47 @@ import {
   workoutSummary,
 } from "../workoutFlow";
 import { useSessionStore } from "../store/session";
+import { listPrograms } from "../api/programs";
+import { listSkills } from "../api/skills";
 
 const Notice = () => (
   <div className="empty-state">
     <h2>Тренировки доступны в Telegram</h2>
   </div>
 );
+export const canonicalCategory = (value: string) =>
+  ({
+    WARMUP: "warmup",
+    MORNING_ROUTINE: "morning",
+    BASE_STRENGTH: "strength",
+    SKILL: "skill",
+    MOBILITY: "warmup",
+    OTHER: "strength",
+  })[value] ?? value;
 const categoryLabels: Record<string, string> = {
-  MORNING_ROUTINE: "Утренние зарядки",
-  WARMUP: "Разминка",
-  BASE_STRENGTH: "Базовая сила",
-  SKILL: "Навыки",
-  MOBILITY: "Мобилити",
-  OTHER: "Другие тренировки",
+  warmup: "Разминка",
+  morning: "Зарядки",
+  strength: "Развитие силы",
+  skill: "Тренировка навыков",
 };
 
 export function WorkoutCatalogPage() {
-  const token = useSessionStore((s) => s.accessToken);
+  const token = useSessionStore((s) => s.accessToken),
+    [params, setParams] = useSearchParams(),
+    selected = params.get("category") ?? "";
   const query = useQuery({
     queryKey: ["workouts"],
     queryFn: () => listWorkouts(token!),
+    enabled: !!token,
+  });
+  const programs = useQuery({
+    queryKey: ["programs"],
+    queryFn: () => listPrograms(token!),
+    enabled: !!token,
+  });
+  const skills = useQuery({
+    queryKey: ["skills-preview"],
+    queryFn: () => listSkills(token!),
     enabled: !!token,
   });
   if (!token) return <Notice />;
@@ -65,19 +86,45 @@ export function WorkoutCatalogPage() {
         Не удалось загрузить каталог тренировок.
       </div>
     );
-  const grouped = (query.data?.workouts ?? []).reduce<
-    Record<string, WorkoutCatalogItem[]>
-  >((out, w) => {
-    (out[w.category || "OTHER"] ??= []).push(w);
-    return out;
-  }, {});
+  const visible = (query.data?.workouts ?? []).filter(
+    (w) => !selected || canonicalCategory(w.category) === selected,
+  );
+  const grouped = visible.reduce<Record<string, WorkoutCatalogItem[]>>(
+    (out, w) => {
+      (out[canonicalCategory(w.category || "strength")] ??= []).push(w);
+      return out;
+    },
+    {},
+  );
   return (
     <div className="stack">
       <div>
-        <p className="eyebrow">ПРОГРАММЫ</p>
+        <p className="eyebrow">ТРЕНИРОВОЧНЫЙ ПУТЬ</p>
         <h2>Тренировки</h2>
       </div>
-      {!Object.keys(grouped).length && <div className="empty-state compact"><h3>Опубликованных тренировок пока нет</h3><p>Сохранённые черновики появятся здесь после публикации тренером.</p></div>}
+      <section className="training-categories">
+        <button
+          className={!selected ? "active" : ""}
+          onClick={() => setParams({})}
+        >
+          Все
+        </button>
+        {Object.entries(categoryLabels).map(([key, label]) => (
+          <button
+            className={selected === key ? "active" : ""}
+            onClick={() => setParams({ category: key })}
+            key={key}
+          >
+            {label}
+          </button>
+        ))}
+      </section>
+      {!Object.keys(grouped).length && (
+        <div className="empty-state compact">
+          <h3>Опубликованных тренировок пока нет</h3>
+          <p>Сохранённые черновики появятся здесь после публикации тренером.</p>
+        </div>
+      )}
       {Object.entries(grouped).map(([category, items]) => (
         <section className="stack workout-category" key={category}>
           <h3>{categoryLabels[category] ?? categoryLabels.OTHER}</h3>
@@ -111,6 +158,51 @@ export function WorkoutCatalogPage() {
           })}
         </section>
       ))}
+      {!selected && (
+        <>
+          <section className="stack">
+            <div className="section-heading">
+              <h3>Программы</h3>
+              <Link to="/programs">Все программы →</Link>
+            </div>
+            {programs.data?.programs.slice(0, 3).map((p) => (
+              <Link
+                className="workout-card"
+                to={`/programs/${p.id}`}
+                key={p.id}
+              >
+                <h3>{p.name}</h3>
+                <p>{p.description}</p>
+                <footer>
+                  <b>{p.workout_count} тренировок</b>
+                </footer>
+              </Link>
+            ))}
+          </section>
+          <section className="stack">
+            <div className="section-heading">
+              <h3>Освоение элементов</h3>
+              <Link to="/skills">Карта навыков →</Link>
+            </div>
+            {skills.data?.skills.slice(0, 3).map((skill) => (
+              <Link
+                className={`skill-node ${skill.status}`}
+                to={`/skills/${skill.id}`}
+                key={skill.id}
+              >
+                <span>{skill.icon}</span>
+                <div>
+                  <h3>{skill.name}</h3>
+                  <small>
+                    {skill.progress_percent}% ·{" "}
+                    {skill.status === "locked" ? "Закрыт" : "Доступен"}
+                  </small>
+                </div>
+              </Link>
+            ))}
+          </section>
+        </>
+      )}
     </div>
   );
 }

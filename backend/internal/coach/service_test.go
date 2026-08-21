@@ -2,6 +2,7 @@ package coach
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -53,6 +54,28 @@ func TestBuilderValidationMatchesDatabaseEnums(t *testing.T) {
 	base.Difficulty, base.MovementType = "beginner", "strength"
 	if validBuilderEnums("exercises", base) {
 		t.Fatal("movement type outside the DB check must be rejected before SQL")
+	}
+}
+
+func TestWorkoutCategoriesMatchPublicTaxonomy(t *testing.T) {
+	for _, category := range []string{"warmup", "morning", "strength", "skill"} {
+		if !validBuilderEnums("workouts", BuilderInput{Difficulty: "beginner", Category: category}) {
+			t.Fatalf("public workout category %q rejected", category)
+		}
+	}
+	for _, legacy := range []string{"WARMUP", "MORNING_ROUTINE", "BASE_STRENGTH", "mobility", "other"} {
+		if validBuilderEnums("workouts", BuilderInput{Difficulty: "beginner", Category: legacy}) {
+			t.Fatalf("legacy category %q accepted for a new write", legacy)
+		}
+	}
+}
+
+func TestWorkoutValidationReturnsSafeFieldInformation(t *testing.T) {
+	in := BuilderInput{Title: "Сила", Description: "План", Difficulty: "beginner", Category: "strength", EstimatedMinutes: 30, DayNumber: 1, ProgramID: "10000000-0000-0000-0000-000000000001", Exercises: []BuilderExercise{{ExerciseID: "10000000-0000-0000-0000-000000000002", Sets: 3, RestSeconds: 60}}}
+	err := validateWorkoutInput(in)
+	var validation *ValidationError
+	if !errors.As(err, &validation) || !strings.Contains(validation.Message, "повторения или длительность") {
+		t.Fatalf("expected safe exercise field error, got %v", err)
 	}
 }
 

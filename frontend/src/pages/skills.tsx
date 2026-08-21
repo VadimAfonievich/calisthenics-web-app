@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
   completeSkillLevel,
+  confirmSkillCriterion,
   getSkill,
   getSkillMap,
   masterSkill,
@@ -84,9 +85,7 @@ function SkillNode({ skill }: { skill: Skill }) {
       </div>
     </>
   );
-  return skill.status === "locked" ? (
-    <article className="skill-node locked">{content}</article>
-  ) : (
+  return (
     <Link className={`skill-node ${skill.status}`} to={`/skills/${skill.id}`}>
       {content}
     </Link>
@@ -119,6 +118,15 @@ export function SkillDetailPage() {
       client.invalidateQueries({ queryKey: ["progress"] });
     },
   });
+  const confirmCriterion = useMutation({
+    mutationFn: (criterionID: string) =>
+      confirmSkillCriterion(token!, id, criterionID),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["skill", id] });
+      client.invalidateQueries({ queryKey: ["skill-map"] });
+      client.invalidateQueries({ queryKey: ["progress"] });
+    },
+  });
   if (!token) return <SkillNotice />;
   if (!valid)
     return (
@@ -128,7 +136,7 @@ export function SkillDetailPage() {
     return <div className="notice skeleton">Загружаем прогрессию…</div>;
   if (query.isError || !query.data)
     return <div className="notice error">Навык не найден.</div>;
-  const { skill, levels } = query.data,
+  const { skill, levels, criteria = [] } = query.data,
     allComplete =
       levels.length > 0 && levels.every((x) => x.status === "completed");
   return (
@@ -136,7 +144,9 @@ export function SkillDetailPage() {
       <Link className="text-link" to="/skills">
         ← Карта навыков
       </Link>
-      {skill.cover_media_url && <img className="lesson-cover" src={skill.cover_media_url} alt="" />}
+      {skill.cover_media_url && (
+        <img className="lesson-cover" src={skill.cover_media_url} alt="" />
+      )}
       <section className="hero-card">
         <span className="skill-icon">{skill.icon}</span>
         <p className="eyebrow">
@@ -149,6 +159,53 @@ export function SkillDetailPage() {
         </div>
         <b>{skill.progress_percent}%</b>
       </section>
+      {criteria.length > 0 && (
+        <section className="stack base-criteria">
+          <h3>Ваши показатели</h3>
+          <p>
+            {criteria.filter((x) => x.confirmed).length} из {criteria.length}{" "}
+            выполнено
+          </p>
+          <div className="progress-track">
+            <i
+              style={{
+                width: `${Math.round((criteria.filter((x) => x.confirmed).length * 100) / criteria.length)}%`,
+              }}
+            />
+          </div>
+          {criteria.map((item) => (
+            <article
+              className={`criterion-row ${item.confirmed ? "completed" : ""}`}
+              key={item.id}
+            >
+              <span>{item.confirmed ? "✓" : "○"}</span>
+              <b>{item.title}</b>
+              {!item.confirmed && (
+                <button
+                  disabled={confirmCriterion.isPending}
+                  onClick={() => confirmCriterion.mutate(item.id)}
+                >
+                  Подтвердить
+                </button>
+              )}
+            </article>
+          ))}
+          {criteria.every((x) => x.confirmed) ? (
+            <p className="notice success">
+              Базовая подготовка пройдена! Теперь вам доступны первые элементы
+              калистеники.
+            </p>
+          ) : (
+            <aside className="card">
+              <h3>Пока не получается выполнить базу?</h3>
+              <p>Развивайте силу и готовьте тело к будущим элементам.</p>
+              <Link className="primary-button" to="/workouts?category=strength">
+                Перейти к базовым тренировкам
+              </Link>
+            </aside>
+          )}
+        </section>
+      )}
       {levels.map((level) => (
         <article className={`skill-level ${level.status}`} key={level.id}>
           <i>

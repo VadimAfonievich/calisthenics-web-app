@@ -48,8 +48,17 @@ type Level struct {
 	Workouts       []Workout `json:"workouts"`
 }
 type Detail struct {
-	Skill  Skill   `json:"skill"`
-	Levels []Level `json:"levels"`
+	Skill    Skill       `json:"skill"`
+	Levels   []Level     `json:"levels"`
+	Criteria []Criterion `json:"criteria"`
+}
+type Criterion struct {
+	ID          string `json:"id"`
+	Code        string `json:"code"`
+	Title       string `json:"title"`
+	Type        string `json:"criterion_type"`
+	TargetValue int32  `json:"target_value"`
+	Confirmed   bool   `json:"confirmed"`
 }
 type Requirement struct {
 	SkillID         string `json:"skill_id"`
@@ -75,8 +84,8 @@ func NewService(pool *pgxpool.Pool) *Service { return &Service{pool} }
 
 const listSQL = `SELECT s.id::text,s.code,s.name,s.description,s.category,s.difficulty,s.icon,s.xp_reward,s.final_criterion_type,s.final_criterion_value,COALESCE(m.url,''),
 CASE WHEN usp.status IS NOT NULL THEN usp.status WHEN EXISTS(SELECT 1 FROM skill_requirements r LEFT JOIN user_skill_progress required ON required.user_id=$1::uuid AND required.skill_id=r.required_skill_id WHERE r.skill_id=s.id AND (required.status IS DISTINCT FROM 'mastered' OR (r.requirement_type='skill_level' AND required.current_level<r.requirement_value))) THEN 'locked' ELSE 'available' END,
-COALESCE(usp.current_level,1),COUNT(sl.id)::int,COALESCE(COUNT(ul.skill_level_id) FILTER(WHERE ul.status='completed'),0)::int
-FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY CASE WHEN s.sort_order=0 THEN 2147483647 ELSE s.sort_order END,s.name,s.id`
+COALESCE(usp.current_level,1),GREATEST(COUNT(sl.id),(SELECT count(*) FROM skill_criteria c WHERE c.skill_id=s.id))::int,GREATEST(COALESCE(COUNT(ul.skill_level_id) FILTER(WHERE ul.status='completed'),0),(SELECT count(*) FROM user_skill_criteria uc JOIN skill_criteria c ON c.id=uc.criterion_id WHERE c.skill_id=s.id AND uc.user_id=$1::uuid))::int
+FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' AND NOT s.hidden GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY CASE WHEN s.sort_order=0 THEN 2147483647 ELSE s.sort_order END,s.name,s.id`
 
 func scanSkill(rows pgx.Rows) (Skill, error) {
 	var x Skill
@@ -173,7 +182,78 @@ func (s *Service) Get(ctx context.Context, user, id string) (Detail, error) {
 			levels[i].Workouts = append(levels[i].Workouts, Workout{*wid, *title, *minutes})
 		}
 	}
-	return Detail{*skill, levels}, rows.Err()
+	if e = rows.Err(); e != nil {
+		return Detail{}, e
+	}
+	criteriaRows, e := s.pool.Query(ctx, `SELECT c.id::text,c.code,c.title,c.criterion_type,c.target_value,uc.criterion_id IS NOT NULL FROM skill_criteria c LEFT JOIN user_skill_criteria uc ON uc.criterion_id=c.id AND uc.user_id=$2::uuid WHERE c.skill_id=$1::uuid ORDER BY c.sort_order`, id, user)
+	if e != nil {
+		return Detail{}, e
+	}
+	defer criteriaRows.Close()
+	criteria := []Criterion{}
+	for criteriaRows.Next() {
+		var c Criterion
+		if e = criteriaRows.Scan(&c.ID, &c.Code, &c.Title, &c.Type, &c.TargetValue, &c.Confirmed); e != nil {
+			return Detail{}, e
+		}
+		criteria = append(criteria, c)
+	}
+	return Detail{*skill, levels, criteria}, criteriaRows.Err()
+}
+
+func (s *Service) ConfirmCriterion(ctx context.Context, user, skillID, criterionID string) (Mastery, error) {
+	tx, e := s.pool.Begin(ctx)
+	if e != nil {
+		return Mastery{}, e
+	}
+	defer tx.Rollback(ctx)
+	var code string
+	var reward int32
+	e = tx.QueryRow(ctx, `SELECT s.code,s.xp_reward FROM skill_criteria c JOIN skills s ON s.id=c.skill_id WHERE c.id=$1::uuid AND c.skill_id=$2::uuid AND s.status='published'`, criterionID, skillID).Scan(&code, &reward)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return Mastery{}, ErrNotFound
+	}
+	if e != nil {
+		return Mastery{}, e
+	}
+	_, e = tx.Exec(ctx, `INSERT INTO user_skill_criteria(user_id,criterion_id) VALUES($1::uuid,$2::uuid) ON CONFLICT DO NOTHING`, user, criterionID)
+	if e != nil {
+		return Mastery{}, e
+	}
+	var total, done int32
+	e = tx.QueryRow(ctx, `SELECT count(*)::int,count(uc.criterion_id)::int FROM skill_criteria c LEFT JOIN user_skill_criteria uc ON uc.criterion_id=c.id AND uc.user_id=$2::uuid WHERE c.skill_id=$1::uuid`, skillID, user).Scan(&total, &done)
+	if e != nil {
+		return Mastery{}, e
+	}
+	if total == 0 || done < total {
+		if e = tx.Commit(ctx); e != nil {
+			return Mastery{}, e
+		}
+		return Mastery{SkillID: skillID, Status: "in_progress"}, nil
+	}
+	var prior string
+	e = tx.QueryRow(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,current_level,status,started_at,completed_at) VALUES($1::uuid,$2::uuid,1,'mastered',NOW(),NOW()) ON CONFLICT(user_id,skill_id) DO UPDATE SET status='mastered',completed_at=COALESCE(user_skill_progress.completed_at,NOW()),updated_at=NOW() RETURNING status`, user, skillID).Scan(&prior)
+	if e != nil {
+		return Mastery{}, e
+	}
+	var awarded bool
+	e = tx.QueryRow(ctx, `INSERT INTO user_achievements(user_id,achievement_id) SELECT $1::uuid,id FROM achievements WHERE code='CALISTHENICS_BASE_READY' ON CONFLICT DO NOTHING RETURNING true`, user).Scan(&awarded)
+	if errors.Is(e, pgx.ErrNoRows) {
+		e = nil
+	}
+	if e != nil {
+		return Mastery{}, e
+	}
+	if awarded {
+		_, e = tx.Exec(ctx, `UPDATE profiles SET xp=xp+$2,level=(SELECT level FROM levels WHERE min_xp<=xp+$2 ORDER BY min_xp DESC LIMIT 1) WHERE user_id=$1::uuid`, user, reward)
+		if e != nil {
+			return Mastery{}, e
+		}
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return Mastery{}, e
+	}
+	return Mastery{SkillID: skillID, Status: "mastered", XPEarned: map[bool]int32{true: reward}[awarded], Achievement: map[bool]string{true: "CALISTHENICS_BASE_READY"}[awarded], AlreadyMastered: !awarded}, nil
 }
 func (s *Service) CompleteLevel(ctx context.Context, user, skillID string, levelNumber, value int32) error {
 	tx, e := s.pool.Begin(ctx)

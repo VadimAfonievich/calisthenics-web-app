@@ -70,6 +70,7 @@ export type BuilderLevel = {
 };
 export type BuilderInput = {
   name?: string;
+  code?: string;
   title?: string;
   description: string;
   difficulty: string;

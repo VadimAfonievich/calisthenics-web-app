@@ -474,6 +474,46 @@ func validExercises(items []BuilderExercise) bool {
 	return true
 }
 
+func validateWorkoutInput(in BuilderInput) error {
+	if strings.TrimSpace(in.Title) == "" {
+		return invalid("Укажите название тренировки.")
+	}
+	if strings.TrimSpace(in.Description) == "" {
+		return invalid("Укажите описание тренировки.")
+	}
+	if in.EstimatedMinutes < 1 {
+		return invalid("Укажите длительность тренировки.")
+	}
+	if in.DayNumber < 1 {
+		return invalid("Укажите номер дня тренировки в программе.")
+	}
+	if !validID(in.ProgramID) {
+		return invalid("Выберите программу.")
+	}
+	if !oneOf(in.Category, "warmup", "morning", "strength", "skill") {
+		return invalid("Выберите категорию тренировки.")
+	}
+	for index, exercise := range in.Exercises {
+		position := index + 1
+		if !validID(exercise.ExerciseID) {
+			return invalid(fmt.Sprintf("Выберите упражнение в позиции %d.", position))
+		}
+		if exercise.Sets < 1 {
+			return invalid(fmt.Sprintf("У упражнения в позиции %d не указано количество подходов.", position))
+		}
+		if (exercise.TargetReps == nil) == (exercise.TargetDurationSeconds == nil) {
+			return invalid(fmt.Sprintf("У упражнения в позиции %d укажите повторения или длительность.", position))
+		}
+		if exercise.RestSeconds < 0 {
+			return invalid(fmt.Sprintf("У упражнения в позиции %d некорректное время отдыха.", position))
+		}
+	}
+	if !validOptionalID(in.ProgramLevelID) || !validExercises(in.Exercises) {
+		return invalid("Проверьте порядок упражнений и выбранный уровень программы.")
+	}
+	return nil
+}
+
 func validProgramWorkouts(items []ProgramWorkout) bool {
 	seenIDs, seenOrder := map[string]bool{}, map[int]bool{}
 	for _, item := range items {
@@ -501,6 +541,9 @@ func validBuilderEnums(kind string, in BuilderInput) bool {
 	if kind == "exercises" && !oneOf(in.MovementType, "reps", "duration", "distance", "custom") {
 		return false
 	}
+	if kind == "workouts" && !oneOf(in.Category, "warmup", "morning", "strength", "skill") {
+		return false
+	}
 	if (kind == "programs" || kind == "skills") && !oneOf(in.Category, "MORNING_ROUTINE", "WARMUP", "BASE_STRENGTH", "SKILL", "MOBILITY", "OTHER") {
 		return false
 	}
@@ -522,6 +565,11 @@ func validBuilderEnums(kind string, in BuilderInput) bool {
 }
 
 func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role, id *string, in BuilderInput) (string, error) {
+	if kind == "workouts" {
+		if err := validateWorkoutInput(in); err != nil {
+			return "", err
+		}
+	}
 	if strings.TrimSpace(in.Description) == "" || !validBuilderEnums(kind, in) || !validOptionalID(in.CoverMediaID) {
 		return "", ErrInvalid
 	}
@@ -579,9 +627,6 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			}
 		}
 	case "workouts":
-		if in.Title == "" || in.EstimatedMinutes < 1 || !validID(in.ProgramID) || !validOptionalID(in.ProgramLevelID) || !validExercises(in.Exercises) {
-			return "", ErrInvalid
-		}
 		var dayExists bool
 		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workouts WHERE program_id=$1::uuid AND day_number=$2 AND ($3::uuid IS NULL OR id<>$3::uuid))`, in.ProgramID, in.DayNumber, id).Scan(&dayExists); e != nil {
 			return "", e
@@ -590,9 +635,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			return "", ErrWorkoutDayInUse
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO workouts(program_id,program_level_id,day_number,title,description,estimated_minutes,owner_user_id,status,cover_media_id) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,'draft',$8::uuid) RETURNING id::text`, in.ProgramID, in.ProgramLevelID, in.DayNumber, in.Title, in.Description, in.EstimatedMinutes, user, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO workouts(program_id,program_level_id,day_number,title,description,estimated_minutes,owner_user_id,status,cover_media_id,category) VALUES($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,'draft',$8::uuid,$9) RETURNING id::text`, in.ProgramID, in.ProgramLevelID, in.DayNumber, in.Title, in.Description, in.EstimatedMinutes, user, in.CoverMediaID, in.Category).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE workouts SET program_id=$4::uuid,program_level_id=$5::uuid,day_number=$6,title=$7,description=$8,estimated_minutes=$9,cover_media_id=$10::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.ProgramID, in.ProgramLevelID, in.DayNumber, in.Title, in.Description, in.EstimatedMinutes, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE workouts SET program_id=$4::uuid,program_level_id=$5::uuid,day_number=$6,title=$7,description=$8,estimated_minutes=$9,cover_media_id=$10::uuid,category=$11 WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.ProgramID, in.ProgramLevelID, in.DayNumber, in.Title, in.Description, in.EstimatedMinutes, in.CoverMediaID, in.Category).Scan(&out)
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, `DELETE FROM workout_exercises WHERE workout_id=$1::uuid`, out)
@@ -833,7 +878,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		defer tx.Rollback(ctx)
 		var out string
-		e = tx.QueryRow(ctx, `INSERT INTO workouts(program_id,program_level_id,day_number,title,description,estimated_minutes,sort_order,owner_user_id,status,cover_media_id) SELECT program_id,program_level_id,(SELECT COALESCE(max(day_number),0)+1 FROM workouts w2 WHERE w2.program_id=w.program_id),title||' — копия',description,estimated_minutes,sort_order,$2::uuid,'draft',cover_media_id FROM workouts w WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e = tx.QueryRow(ctx, `INSERT INTO workouts(program_id,program_level_id,day_number,title,description,estimated_minutes,sort_order,owner_user_id,status,cover_media_id,category) SELECT program_id,program_level_id,(SELECT COALESCE(max(day_number),0)+1 FROM workouts w2 WHERE w2.program_id=w.program_id),title||' — копия',description,estimated_minutes,sort_order,$2::uuid,'draft',cover_media_id,category FROM workouts w WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}

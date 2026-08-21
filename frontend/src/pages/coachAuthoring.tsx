@@ -413,6 +413,59 @@ export const moveProgramWorkout = (
   [next[index], next[target]] = [next[target], next[index]];
   return normalizeProgramWorkouts(next);
 };
+export const builderPayload = (
+  kind: Exclude<ContentKind, "lessons">,
+  value: BuilderInput,
+): BuilderInput => {
+  const common = {
+    description: value.description,
+    difficulty: value.difficulty,
+    cover_media_id: value.cover_media_id,
+  };
+  if (kind === "workouts")
+    return {
+      ...common,
+      title: value.title,
+      category: value.category,
+      estimated_minutes: value.estimated_minutes,
+      day_number: value.day_number,
+      program_id: value.program_id,
+      program_level_id: value.program_level_id,
+      exercises: value.exercises,
+    };
+  if (kind === "exercises")
+    return {
+      ...common,
+      name: value.name,
+      movement_type: value.movement_type,
+      instructions: value.instructions,
+      common_mistakes: value.common_mistakes,
+      coach_tips: value.coach_tips,
+      muscle_groups: value.muscle_groups,
+      equipment: value.equipment,
+    };
+  if (kind === "programs")
+    return {
+      ...common,
+      name: value.name,
+      duration_weeks: value.duration_weeks,
+      category: value.category,
+      workouts: value.workouts,
+    };
+  return {
+    ...common,
+    name: value.name,
+    code: value.code,
+    category: value.category,
+    icon: value.icon,
+    xp_reward: value.xp_reward,
+    final_criterion_type: value.final_criterion_type,
+    final_criterion_value: value.final_criterion_value,
+    levels: value.levels,
+    requirements: value.requirements,
+    sort_order: value.sort_order,
+  };
+};
 export function CoachEditor() {
   const { kind = "lessons", id = "new" } = useParams();
   const [search] = useSearchParams();
@@ -815,6 +868,7 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
   ...(kind === "workouts"
     ? {
         title: "",
+        category: "strength",
         estimated_minutes: 20,
         day_number: 1,
         program_id: "",
@@ -1014,7 +1068,7 @@ function BuilderEditor({
         const result = await saveBuilder(
           token(),
           kind,
-          value,
+          builderPayload(kind, value),
           edit ? id : undefined,
         );
         if (publish) await action(token(), kind, result.id, "publish");
@@ -1208,7 +1262,21 @@ function BuilderEditor({
         </>
       )}
       {kind === "workouts" && (
-        <WorkoutFields value={value} change={change} opts={opts.data} />
+        <>
+          <label>
+            Категория
+            <select
+              value={value.category ?? "strength"}
+              onChange={(e) => change({ ...value, category: e.target.value })}
+            >
+              <option value="warmup">Разминка</option>
+              <option value="morning">Зарядка</option>
+              <option value="strength">Развитие силы</option>
+              <option value="skill">Тренировка навыков</option>
+            </select>
+          </label>
+          <WorkoutFields value={value} change={change} opts={opts.data} />
+        </>
       )}{" "}
       {kind === "programs" && (
         <ProgramWorkouts value={value} change={change} opts={opts.data} />

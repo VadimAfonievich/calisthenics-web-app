@@ -18,6 +18,24 @@ type SkillsStore interface {
 	Map(context.Context, string) (skills.Map, error)
 	CompleteLevel(context.Context, string, string, int32, int32) error
 	Master(context.Context, string, string, int32) (skills.Mastery, error)
+	ConfirmCriterion(context.Context, string, string, string) (skills.Mastery, error)
+}
+
+func confirmSkillCriterion(s SkillsStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		skillID, criterionID := chi.URLParam(r, "id"), chi.URLParam(r, "criterionID")
+		if !validUUID(skillID) || !validUUID(criterionID) {
+			invalidInput(w)
+			return
+		}
+		u, _ := middleware.UserID(r.Context())
+		out, e := s.ConfirmCriterion(r.Context(), u, skillID, criterionID)
+		if e != nil {
+			skillError(w, e)
+			return
+		}
+		writeJSON(w, 200, out)
+	}
 }
 
 func skillError(w http.ResponseWriter, err error) {

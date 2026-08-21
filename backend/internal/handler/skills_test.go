@@ -29,6 +29,9 @@ func (s skillsStub) CompleteLevel(context.Context, string, string, int32, int32)
 func (s skillsStub) Master(context.Context, string, string, int32) (skills.Mastery, error) {
 	return s.mastery, s.err
 }
+func (s skillsStub) ConfirmCriterion(context.Context, string, string, string) (skills.Mastery, error) {
+	return skills.Mastery{}, s.err
+}
 
 func TestSkillListAndMapContracts(t *testing.T) {
 	for _, handler := range []http.HandlerFunc{listSkills(skillsStub{}), skillMap(skillsStub{})} {
@@ -64,6 +67,17 @@ func TestMasteryIdempotencyContract(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/skills/"+validEntityID+"/master", strings.NewReader(`{"value":10}`)))
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"already_mastered":true`) || !strings.Contains(w.Body.String(), `"xp_earned":0`) {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestConfirmCriterionContract(t *testing.T) {
+	router := chi.NewRouter()
+	router.Post("/skills/{id}/criteria/{criterionID}/confirm", confirmSkillCriterion(skillsStub{}))
+	w := httptest.NewRecorder()
+	criterionID := "68000000-0000-0000-0000-000000000001"
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/skills/"+validEntityID+"/criteria/"+criterionID+"/confirm", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"xp_earned":0`) {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
 }

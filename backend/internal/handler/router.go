@@ -66,6 +66,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Get("/skills/{id}", getSkill(dependencies.Skills))
 			protected.Post("/skills/{id}/levels/{level}/complete", completeSkillLevel(dependencies.Skills))
 			protected.Post("/skills/{id}/master", masterSkill(dependencies.Skills))
+			protected.Post("/skills/{id}/criteria/{criterionID}/confirm", confirmSkillCriterion(dependencies.Skills))
 			protected.Get("/calendar", calendarRange(dependencies.Calendar))
 			protected.Get("/calendar/today", calendarToday(dependencies.Calendar))
 			protected.Get("/training-schedules", schedules(dependencies.Calendar))

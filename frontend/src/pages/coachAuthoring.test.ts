@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   blockNames,
+  builderPayload,
   kinds,
   moveProgramWorkout,
   numericValue,
@@ -97,5 +98,41 @@ describe("workout validation", () => {
     const draft = { ...base, exercises: [] };
     expect(validateBuilder("workouts", draft)).toBe("");
     expect(validateBuilder("workouts", draft, true)).toContain("упражнение");
+  });
+});
+
+describe("workout update DTO", () => {
+  it("uses the create contract and strips read-only detail fields", () => {
+    const payload = builderPayload("workouts", {
+      id: "server-id",
+      status: "published",
+      owner_user_id: "owner-id",
+      title: "Сила 2",
+      description: "План",
+      difficulty: "beginner",
+      category: "strength",
+      estimated_minutes: 35,
+      day_number: 2,
+      program_id: "program-id",
+      program_level_id: "level-id",
+      exercises: [{
+        exercise_id: "exercise-id",
+        sets: 4,
+        target_reps: 12,
+        rest_seconds: 75,
+        sort_order: 0,
+        notes: "Строгая техника",
+      }],
+    } as never);
+    expect(payload).toMatchObject({
+      title: "Сила 2",
+      category: "strength",
+      estimated_minutes: 35,
+      program_level_id: "level-id",
+    });
+    expect(payload.exercises?.[0]).toMatchObject({target_reps: 12, rest_seconds: 75, notes: "Строгая техника"});
+    expect(payload).not.toHaveProperty("id");
+    expect(payload).not.toHaveProperty("status");
+    expect(payload).not.toHaveProperty("owner_user_id");
   });
 });
