@@ -28,6 +28,7 @@ import {
   elapsedSeconds,
   exerciseTarget,
   formatClock,
+  isPreparationTime,
   nextSet,
   progressPercent,
   totalSets,
@@ -349,21 +350,16 @@ export function WorkoutPlayerPage() {
     setRemaining(current=>current===next?current:next);
   }, [phase,now]);
   useEffect(() => {
-    if (phase === "timer" && remaining === 0 && timerStarted.current) {
+    if (phase === "timer" && isPreparationTime(remaining) && timerStarted.current) {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
         "success",
       );
     }
-    if (phase === "rest" && remaining>0 && remaining<=5) voice.current.restCountdown(remaining);
-    if (phase === "timer" && remaining>0 && remaining<=5) voice.current.countdown(phase,remaining);
-    if (phase === "timer" && remaining===0 && timerStarted.current) voice.current.cancel();
-    if ((phase === "timer" || phase === "rest") && remaining>0 && remaining<=5) {
-      if (remaining<=3) window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
-    }
-    if (phase === "rest" && remaining === 0) {
+    if (phase === "timer" && isPreparationTime(remaining) && timerStarted.current) voice.current.cancel();
+    if (phase === "rest" && isPreparationTime(remaining)) {
       voice.current.cancel();
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
-      setRemaining(5); phaseDeadline.current=Date.now()+5000; setPhase("prepare");
+      setRemaining(5); setPhase("prepare");
     }
     if (phase === "prepare" && remaining>0 && remaining<=5) voice.current.countdown("prepare",remaining);
     if (phase === "prepare" && remaining===0 && current) {
@@ -425,7 +421,7 @@ export function WorkoutPlayerPage() {
     },
   });
   useEffect(()=>{
-    if(phase!=="timer"||remaining!==0||!timerStarted.current||!current||record.isPending)return;
+    if(phase!=="timer"||!isPreparationTime(remaining)||!timerStarted.current||!current||record.isPending)return;
     const key=`${current.exercise.id}:${current.setNumber}`;
     if(autoSaved.current===key)return;
     autoSaved.current=key;

@@ -20,7 +20,7 @@ The authoring dependency direction is `Exercise → Workout ← Program → Skil
 
 A workout can offer a reusable standard warmup with `warmup_enabled` (true by default outside the `warmup` category). Warmup exercises are never copied into the main workout. The published `category='warmup'` row marked `is_default_warmup` is returned as runtime preview metadata. Completing a warmup records exercise/activity time, but does not increment full-workout count, streak, workout achievements, progression criteria, or XP.
 
-The optional Voice Coach wraps browser Speech Synthesis rather than calling it throughout player components. It uses `ru-RU`, follows the same visual `remaining` state for final 5-second timed/rest announcements, cancels obsolete speech on player actions, and falls back silently to visual countdown plus Telegram haptics. The user preference is local under `calisthenics_voice_coach_enabled` and defaults on; the player provides a test action initiated by user gesture.
+The optional Voice Coach wraps browser Speech Synthesis rather than calling it throughout player components. It uses `ru-RU`, announces the five-second preparation phase (the timed exercise/rest phase ends when that preparation window begins), cancels obsolete speech on player actions, and falls back silently to the visual countdown. The user preference is local under `calisthenics_voice_coach_enabled` and defaults on; the player provides a test action initiated by user gesture.
 
 Skills use the existing `skills.sort_order` as an explicit display position. The Coach editor expresses it as “После какого навыка?”, while prerequisites remain a separate dependency concept. Student queries order by `sort_order`, then name and ID for deterministic ties.
 

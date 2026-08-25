@@ -12,3 +12,5 @@ export const workoutSummary=(sets:CompletedSet[])=>({completed_sets:completedCou
 export const addRestSeconds=(remaining:number)=>Math.max(0,remaining)+15
 export const skipRest=()=>0
 export const actualTimedSetSeconds=(startedAt:number,now=Date.now())=>Math.max(0,Math.round((now-startedAt)/1000))
+export const PREPARATION_SECONDS=5
+export const isPreparationTime=(remaining:number)=>remaining<=PREPARATION_SECONDS
