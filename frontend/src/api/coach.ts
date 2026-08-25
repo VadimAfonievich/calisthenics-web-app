@@ -132,11 +132,23 @@ export type MediaAsset = {
   references: number;
   status: string;
 };
+export type AnalyticsMetric = { name: string; value: number; secondary: number };
+export type CoachAnalytics = {
+  total_users: number;
+  active_users_7d: number;
+  active_users_30d: number;
+  total_workouts_completed: number;
+  workouts_7d: number;
+  workouts_30d: number;
+  total_lessons_completed: number;
+  popular_workouts: AnalyticsMetric[];
+  skill_progress: AnalyticsMetric[];
+  top_achievements: AnalyticsMetric[];
+};
 export const coachMe = (t: string) =>
     api<{ role: CoachRole }>("/coach/me", {}, t),
   dashboard = (t: string) => api<Dashboard>("/coach/dashboard", {}, t),
-  analytics = (t: string) =>
-    api<Record<string, unknown>>("/coach/analytics", {}, t),
+  analytics = (t: string) => api<CoachAnalytics>("/coach/analytics", {}, t),
   content = (t: string, kind: string, search = "", status = "") =>
     api<{ items: ContentItem[] }>(
       `/coach/${kind}?${new URLSearchParams({ search, status })}`,

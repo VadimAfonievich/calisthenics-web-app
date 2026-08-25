@@ -10,6 +10,7 @@ import {
   createLesson,
   dashboard,
   media,
+  type AnalyticsMetric,
   type LessonBlock,
   type LessonInput,
 } from "../api/coach";
@@ -429,23 +430,91 @@ function Media({ token }: { token: string }) {
 export function CoachAnalyticsPage() {
   return <Gate>{(token) => <Analytics token={token} />}</Gate>;
 }
-function Analytics({ token }: { token: string }) {
+
+const plural = (value: number, one: string, few: string, many: string) => {
+  const tens = value % 100, units = value % 10;
+  if (tens >= 11 && tens <= 14) return many;
+  if (units === 1) return one;
+  return units >= 2 && units <= 4 ? few : many;
+};
+
+const metricDuration = (seconds: number) => {
+  const minutes = Math.round(seconds / 60);
+  return minutes < 60
+    ? `${minutes} мин`
+    : `${Math.floor(minutes / 60)} ч ${minutes % 60} мин`;
+};
+
+function AnalyticsRanking({
+  items,
+  kind,
+}: {
+  items: AnalyticsMetric[];
+  kind: "workouts" | "skills" | "achievements";
+}) {
+  if (!items.length)
+    return <div className="analytics-empty">Пока недостаточно данных</div>;
+  const max = Math.max(1, ...items.map((item) => item.value));
+  return (
+    <div className="analytics-ranking">
+      {items.map((item, index) => (
+        <article className="analytics-rank-row" key={item.name}>
+          <span className="analytics-rank">{index + 1}</span>
+          <div>
+            <header><b>{item.name}</b><strong>{item.value}</strong></header>
+            <div className="analytics-bar"><i style={{ width: `${Math.max(4, item.value / max * 100)}%` }} /></div>
+            <small>
+              {kind === "workouts"
+                ? `Среднее время: ${metricDuration(item.secondary)}`
+                : kind === "skills"
+                  ? `Средний уровень: ${item.secondary.toFixed(1)}`
+                  : plural(item.value, "получение", "получения", "получений")}
+            </small>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+export function Analytics({ token }: { token: string }) {
   const q = useQuery({
     queryKey: ["coach-analytics"],
     queryFn: () => analytics(token),
   });
+  if (q.isLoading)
+    return <div className="notice skeleton">Собираем аналитику…</div>;
+  if (q.isError || !q.data)
+    return <div className="notice error">Не удалось загрузить аналитику.</div>;
+  const data = q.data;
+  const activeShare = data.total_users
+    ? Math.round(data.active_users_30d / data.total_users * 100)
+    : 0;
   return (
-    <div className="stack">
+    <div className="stack coach-analytics">
       <Link className="text-link" to="/coach">
         ← Панель тренера
       </Link>
-      <h2>Аналитика</h2>
-      <pre className="card analytics-json">
-        {JSON.stringify(q.data ?? {}, null, 2)}
-      </pre>
-      <p className="notice">
-        Финансовая аналитика появится после подключения оплат.
-      </p>
+      <div className="coach-title">
+        <div><p className="eyebrow">ОБЩАЯ СТАТИСТИКА</p><h2>Аналитика</h2></div>
+        <span className="analytics-period">30 дней</span>
+      </div>
+      <section className="analytics-kpis" aria-label="Ключевые показатели">
+        <article><span>Ученики</span><b>{data.total_users}</b><small>{activeShare}% активны за месяц</small></article>
+        <article><span>Тренировки</span><b>{data.total_workouts_completed}</b><small>завершено всего</small></article>
+        <article><span>Уроки</span><b>{data.total_lessons_completed}</b><small>изучено учениками</small></article>
+      </section>
+      <section className="card analytics-activity">
+        <header><p className="eyebrow">АКТИВНОСТЬ</p><h3>Последние периоды</h3></header>
+        <div className="analytics-period-grid">
+          <article><span>7 дней</span><b>{data.active_users_7d}</b><small>{plural(data.active_users_7d, "активный ученик", "активных ученика", "активных учеников")}</small><strong>{data.workouts_7d} тренировок</strong></article>
+          <article><span>30 дней</span><b>{data.active_users_30d}</b><small>{plural(data.active_users_30d, "активный ученик", "активных ученика", "активных учеников")}</small><strong>{data.workouts_30d} тренировок</strong></article>
+        </div>
+      </section>
+      <section className="card analytics-section"><header><div><p className="eyebrow">ПОПУЛЯРНОСТЬ</p><h3>Тренировки</h3></div><span>{data.popular_workouts.length}</span></header><AnalyticsRanking items={data.popular_workouts} kind="workouts" /></section>
+      <section className="card analytics-section"><header><div><p className="eyebrow">ПРОГРЕСС</p><h3>Навыки учеников</h3></div><span>{data.skill_progress.length}</span></header><AnalyticsRanking items={data.skill_progress} kind="skills" /></section>
+      <section className="card analytics-section"><header><div><p className="eyebrow">МОТИВАЦИЯ</p><h3>Достижения</h3></div><span>{data.top_achievements.length}</span></header><AnalyticsRanking items={data.top_achievements} kind="achievements" /></section>
+      <p className="analytics-footnote">Показатели агрегированы по всем ученикам платформы.</p>
     </div>
   );
 }
