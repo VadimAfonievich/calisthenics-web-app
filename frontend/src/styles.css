@@ -379,6 +379,18 @@ a {
   filter: saturate(0);
   opacity: 0.5;
 }
+.achievements-preview { display:grid; gap:14px; }
+.achievements-preview > header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.achievements-preview > header h3 { margin:3px 0 0; }
+.achievements-preview > header > b { color:var(--tg-accent); font-size:.8rem; }
+.achievements-preview-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.achievement-mini { display:grid; grid-template-columns:34px 1fr; align-items:center; gap:8px; min-width:0; padding:10px; border:1px solid rgb(148 163 184/.14); border-radius:13px; background:rgb(15 23 42/.55); }
+.achievement-mini i { font-style:normal; font-size:1.45rem; text-align:center; }
+.achievement-mini span { display:grid; min-width:0; gap:3px; }
+.achievement-mini span b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.75rem; }
+.achievement-mini small { color:var(--tg-muted); font-size:.62rem; }
+.achievement-mini.locked { filter:saturate(0); opacity:.48; }
+.achievement-mini.unlocked { border-color:rgb(52 211 153/.28); }
 .admin-tabs {
   display: flex;
   flex-wrap: wrap;
