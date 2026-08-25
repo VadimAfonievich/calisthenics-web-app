@@ -22,7 +22,7 @@ A workout can offer a reusable standard warmup with `warmup_enabled` (true by de
 
 The optional Voice Coach wraps browser Speech Synthesis rather than calling it throughout player components. It uses `ru-RU`, announces the five-second preparation phase (the timed exercise/rest phase ends when that preparation window begins), cancels obsolete speech on player actions, and falls back silently to the visual countdown. The user preference is local under `calisthenics_voice_coach_enabled` and defaults on; the player provides a test action initiated by user gesture.
 
-Skills use the existing `skills.sort_order` as an explicit display position. The Coach editor expresses it as “После какого навыка?”, while prerequisites remain a separate dependency concept. Student queries order by `sort_order`, then name and ID for deterministic ties.
+The shared student skill map is divided into `basic`, `floor`, `bar`, and `parallel_bars` groups («Базовые навыки», «Пол», «Турник», «Брусья»). Coaches choose the group, display position, and one or more prerequisite skills in the skill editor. Prerequisites remain the source of unlock behavior and graph depth; `skills.sort_order` controls deterministic order inside the group. The student map renders only published, non-hidden nodes and published prerequisite edges. Coach-specific maps and content libraries are deferred until coach-to-student tenancy is introduced.
 
 Every lesson, exercise, workout, program, and skill has its own `draft`, `published`, and `archived` lifecycle. Publishing never cascades:
 

@@ -86,6 +86,7 @@ export type BuilderInput = {
   muscle_groups?: string[];
   equipment?: string[];
   category?: string;
+  map_group?: "basic" | "floor" | "bar" | "parallel_bars";
   icon?: string;
   xp_reward?: number;
   final_criterion_type?: string;

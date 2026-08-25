@@ -601,20 +601,39 @@ textarea {
 }
 .skill-map {
   display: grid;
+  gap: 18px;
+}
+.skill-group {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgb(148 163 184/0.16);
+  border-radius: 20px;
+  background: rgb(15 23 42/0.4);
+}
+.skill-group > header small {
+  color: var(--tg-muted);
+}
+.skill-group-tree {
+  display: grid;
   gap: 0;
 }
 .skill-branch {
   position: relative;
   display: grid;
   gap: 7px;
-  padding-bottom: 18px;
+  padding-bottom: 14px;
 }
+.skill-branch.depth-1 { margin-left: 18px; }
+.skill-branch.depth-2 { margin-left: 36px; }
+.skill-branch.depth-3 { margin-left: 54px; }
+.skill-branch:last-child { padding-bottom: 0; }
 .skill-line {
   position: absolute;
   left: 31px;
-  top: -18px;
+  top: -14px;
   width: 2px;
-  height: 18px;
+  height: 14px;
   background: rgb(52 211 153/0.35);
 }
 .skill-branch > small {

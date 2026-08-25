@@ -114,6 +114,7 @@ type BuilderInput struct {
 	Description         string            `json:"description"`
 	Difficulty          string            `json:"difficulty"`
 	Category            string            `json:"category"`
+	MapGroup            string            `json:"map_group"`
 	DurationWeeks       int               `json:"duration_weeks"`
 	EstimatedMinutes    int               `json:"estimated_minutes"`
 	DayNumber           int               `json:"day_number"`
@@ -253,6 +254,9 @@ var uuidValue = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4
 
 func validID(value string) bool          { return uuidValue.MatchString(value) }
 func validOptionalID(value *string) bool { return value == nil || validID(*value) }
+func validMapGroup(value string) bool {
+	return value == "basic" || value == "floor" || value == "bar" || value == "parallel_bars"
+}
 
 func slugBase(value string) string {
 	r := strings.NewReplacer("а", "a", "б", "b", "в", "v", "г", "g", "д", "d", "е", "e", "ё", "e", "ж", "zh", "з", "z", "и", "i", "й", "y", "к", "k", "л", "l", "м", "m", "н", "n", "о", "o", "п", "p", "р", "r", "с", "s", "т", "t", "у", "u", "ф", "f", "х", "h", "ц", "ts", "ч", "ch", "ш", "sh", "щ", "sch", "ъ", "", "ы", "y", "ь", "", "э", "e", "ю", "yu", "я", "ya")
@@ -659,7 +663,10 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			}
 		}
 	case "skills":
-		if in.Name == "" || in.Icon == "" || in.FinalCriterionValue < 1 || len(in.Levels) == 0 {
+		if in.MapGroup == "" {
+			in.MapGroup = "basic"
+		}
+		if in.Name == "" || in.Icon == "" || in.FinalCriterionValue < 1 || len(in.Levels) == 0 || !validMapGroup(in.MapGroup) {
 			return "", ErrInvalid
 		}
 		for _, level := range in.Levels {
@@ -686,9 +693,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			_, e = tx.Exec(ctx, `UPDATE skills SET sort_order=sort_order+1 WHERE sort_order >= $1 AND ($2::uuid IS NULL OR id<>$2::uuid)`, in.SortOrder, id)
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::uuid,'draft',$11::uuid,$12) RETURNING id::text`, in.Code, in.Name, in.Description, in.Category, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, user, in.CoverMediaID, in.SortOrder).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::uuid,'draft',$12::uuid,$13) RETURNING id::text`, in.Code, in.Name, in.Description, in.Category, in.MapGroup, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, user, in.CoverMediaID, in.SortOrder).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE skills SET code=$4,name=$5,description=$6,category=$7,difficulty=$8,icon=$9,xp_reward=$10,final_criterion_type=$11,final_criterion_value=$12,cover_media_id=$13::uuid,sort_order=$14 WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Code, in.Name, in.Description, in.Category, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, in.CoverMediaID, in.SortOrder).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE skills SET code=$4,name=$5,description=$6,category=$7,map_group=$8,difficulty=$9,icon=$10,xp_reward=$11,final_criterion_type=$12,final_criterion_value=$13,cover_media_id=$14::uuid,sort_order=$15 WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Code, in.Name, in.Description, in.Category, in.MapGroup, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, in.CoverMediaID, in.SortOrder).Scan(&out)
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, `DELETE FROM skill_requirements WHERE skill_id=$1::uuid`, out)
@@ -940,7 +947,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		defer tx.Rollback(ctx)
 		var out string
-		e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id) SELECT code||'_COPY_'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,6)),name||' — копия',description,category,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,$2::uuid,'draft',cover_media_id FROM skills WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id) SELECT code||'_COPY_'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,6)),name||' — копия',description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,$2::uuid,'draft',cover_media_id FROM skills WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}

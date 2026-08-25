@@ -7,6 +7,7 @@ export type Skill = {
   name: string;
   description: string;
   category: string;
+  map_group: "basic" | "floor" | "bar" | "parallel_bars";
   difficulty: string;
   icon: string;
   xp_reward: number;

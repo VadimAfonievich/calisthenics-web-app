@@ -463,6 +463,7 @@ export const builderPayload = (
     xp_reward: value.xp_reward,
     final_criterion_type: value.final_criterion_type,
     final_criterion_value: value.final_criterion_value,
+    map_group: value.map_group,
     levels: value.levels,
     requirements: value.requirements,
     sort_order: value.sort_order,
@@ -883,6 +884,7 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
     ? {
         name: "",
         category: "SKILL",
+        map_group: "basic",
         icon: "◇",
         xp_reward: 100,
         final_criterion_type: "repetitions",
@@ -1339,6 +1341,22 @@ function BuilderEditor({
                 })
               }
             />
+          </label>
+          <label>
+            Раздел карты
+            <select
+              value={value.map_group ?? "basic"}
+              onChange={(e) => change({
+                ...value,
+                map_group: e.target.value as BuilderInput["map_group"],
+              })}
+            >
+              <option value="basic">Базовые навыки</option>
+              <option value="floor">Пол</option>
+              <option value="bar">Турник</option>
+              <option value="parallel_bars">Брусья</option>
+            </select>
+            <small>Определяет раздел навыка в общей карте ученика.</small>
           </label>
           <label>
             Расположение в карте навыков

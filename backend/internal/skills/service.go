@@ -20,6 +20,7 @@ type Skill struct {
 	Name                string `json:"name"`
 	Description         string `json:"description"`
 	Category            string `json:"category"`
+	MapGroup            string `json:"map_group"`
 	Difficulty          string `json:"difficulty"`
 	Icon                string `json:"icon"`
 	XPReward            int32  `json:"xp_reward"`
@@ -82,15 +83,15 @@ type Service struct{ pool *pgxpool.Pool }
 
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool} }
 
-const listSQL = `SELECT s.id::text,s.code,s.name,s.description,s.category,s.difficulty,s.icon,s.xp_reward,s.final_criterion_type,s.final_criterion_value,COALESCE(m.url,''),
+const listSQL = `SELECT s.id::text,s.code,s.name,s.description,s.category,s.map_group,s.difficulty,s.icon,s.xp_reward,s.final_criterion_type,s.final_criterion_value,COALESCE(m.url,''),
 CASE WHEN usp.status IS NOT NULL THEN usp.status WHEN EXISTS(SELECT 1 FROM skill_requirements r LEFT JOIN user_skill_progress required ON required.user_id=$1::uuid AND required.skill_id=r.required_skill_id WHERE r.skill_id=s.id AND (required.status IS DISTINCT FROM 'mastered' OR (r.requirement_type='skill_level' AND required.current_level<r.requirement_value))) THEN 'locked' ELSE 'available' END,
 COALESCE(usp.current_level,1),GREATEST(COUNT(sl.id),(SELECT count(*) FROM skill_criteria c WHERE c.skill_id=s.id))::int,GREATEST(COALESCE(COUNT(ul.skill_level_id) FILTER(WHERE ul.status='completed'),0),(SELECT count(*) FROM user_skill_criteria uc JOIN skill_criteria c ON c.id=uc.criterion_id WHERE c.skill_id=s.id AND uc.user_id=$1::uuid))::int
-FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' AND NOT s.hidden GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY CASE WHEN s.sort_order=0 THEN 2147483647 ELSE s.sort_order END,s.name,s.id`
+FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' AND NOT s.hidden GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY CASE s.map_group WHEN 'basic' THEN 1 WHEN 'floor' THEN 2 WHEN 'bar' THEN 3 WHEN 'parallel_bars' THEN 4 ELSE 5 END,CASE WHEN s.sort_order=0 THEN 2147483647 ELSE s.sort_order END,s.name,s.id`
 
 func scanSkill(rows pgx.Rows) (Skill, error) {
 	var x Skill
 	var completed int32
-	err := rows.Scan(&x.ID, &x.Code, &x.Name, &x.Description, &x.Category, &x.Difficulty, &x.Icon, &x.XPReward, &x.FinalCriterionType, &x.FinalCriterionValue, &x.CoverMediaURL, &x.Status, &x.CurrentLevel, &x.TotalLevels, &completed)
+	err := rows.Scan(&x.ID, &x.Code, &x.Name, &x.Description, &x.Category, &x.MapGroup, &x.Difficulty, &x.Icon, &x.XPReward, &x.FinalCriterionType, &x.FinalCriterionValue, &x.CoverMediaURL, &x.Status, &x.CurrentLevel, &x.TotalLevels, &completed)
 	if x.TotalLevels > 0 {
 		x.ProgressPercent = completed * 100 / x.TotalLevels
 	}
@@ -120,7 +121,7 @@ func (s *Service) Map(ctx context.Context, user string) (Map, error) {
 	if e != nil {
 		return Map{}, e
 	}
-	rows, e := s.pool.Query(ctx, `SELECT skill_id::text,required_skill_id::text,requirement_type,requirement_value FROM skill_requirements ORDER BY skill_id,required_skill_id`)
+	rows, e := s.pool.Query(ctx, `SELECT r.skill_id::text,r.required_skill_id::text,r.requirement_type,r.requirement_value FROM skill_requirements r JOIN skills child ON child.id=r.skill_id JOIN skills parent ON parent.id=r.required_skill_id WHERE child.status='published' AND NOT child.hidden AND parent.status='published' AND NOT parent.hidden ORDER BY r.skill_id,r.required_skill_id`)
 	if e != nil {
 		return Map{}, e
 	}

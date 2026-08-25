@@ -17,6 +17,12 @@ const statusLabels = {
   in_progress: "В процессе",
   mastered: "Освоен",
 };
+const skillGroups = [
+  { id: "basic", title: "Базовые навыки", description: "Фундамент силы, мобильности и контроля тела" },
+  { id: "floor", title: "Пол", description: "Упоры, балансы и элементы без снарядов" },
+  { id: "bar", title: "Турник", description: "Тяговые и силовые элементы на перекладине" },
+  { id: "parallel_bars", title: "Брусья", description: "Упоры и силовые элементы на брусьях" },
+] as const;
 const criterion = (type: string, value: number) =>
   type === "duration_seconds"
     ? `${value} сек`
@@ -45,6 +51,20 @@ export function SkillsPage() {
       <div className="notice error">Не удалось загрузить карту навыков.</div>
     );
   const byID = new Map(query.data.nodes.map((x) => [x.id, x]));
+  const requirementsBySkill = new Map<string,string[]>();
+  query.data.requirements.forEach((requirement) => {
+    requirementsBySkill.set(requirement.skill_id,[
+      ...(requirementsBySkill.get(requirement.skill_id) ?? []),
+      requirement.required_skill_id,
+    ]);
+  });
+  const depthOf = (skillID:string, trail=new Set<string>()):number => {
+    if(trail.has(skillID)) return 0;
+    const parents=requirementsBySkill.get(skillID) ?? [];
+    if(!parents.length) return 0;
+    const nextTrail=new Set(trail).add(skillID);
+    return 1+Math.max(...parents.map(parent=>depthOf(parent,nextTrail)));
+  };
   return (
     <div className="stack">
       <div>
@@ -52,19 +72,23 @@ export function SkillsPage() {
         <h2>Навыки</h2>
       </div>
       <div className="skill-map">
-        {query.data.nodes.map((skill, i) => (
-          <div key={skill.id} className="skill-branch">
-            {i > 0 && <i className="skill-line" />}
-            <SkillNode skill={skill} />
-            {query.data.requirements
-              .filter((r) => r.skill_id === skill.id)
-              .map((r) => (
-                <small key={r.required_skill_id}>
-                  Требуется: {byID.get(r.required_skill_id)?.name}
-                </small>
-              ))}
-          </div>
-        ))}
+        {skillGroups.map(group => {
+          const skills=query.data.nodes.filter(skill=>(skill.map_group ?? "basic")===group.id);
+          if(!skills.length)return null;
+          return <section className="skill-group" key={group.id}>
+            <header><p className="eyebrow">{group.title}</p><small>{group.description}</small></header>
+            <div className="skill-group-tree">
+              {skills.map(skill => {
+                const parents=requirementsBySkill.get(skill.id) ?? [];
+                return <div key={skill.id} className={`skill-branch depth-${Math.min(depthOf(skill.id),3)}`}>
+                  {parents.length>0&&<i className="skill-line" />}
+                  <SkillNode skill={skill} />
+                  {parents.length>0&&<small>После: {parents.map(parent=>byID.get(parent)?.name).filter(Boolean).join(" + ")}</small>}
+                </div>;
+              })}
+            </div>
+          </section>;
+        })}
       </div>
     </div>
   );
