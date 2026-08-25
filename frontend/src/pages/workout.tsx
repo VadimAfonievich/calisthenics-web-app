@@ -455,7 +455,8 @@ export function WorkoutPlayerPage() {
     total = totalSets(workout),
     done = completedCount(dataSets),
     elapsed = elapsedSeconds(session.started_at, now),
-    summary = workoutSummary(dataSets);
+    summary = workoutSummary(dataSets),
+    continuesToWorkout = !!session.follow_up_workout_id;
   const continuation=finish.data?.session.next_session?.id??finish.data?.session.continued_session_id??session.continued_session_id;
   if ((phase==="transition"||session.status==="completed") && continuation)
     return <WarmupTransition sessionID={continuation} title={finish.data?.session.follow_up_workout_title??session.follow_up_workout_title??"Основная тренировка"} onContinue={(mainSessionID)=>navigate(`/workout-session/${mainSessionID}`)}/>;
@@ -543,7 +544,9 @@ export function WorkoutPlayerPage() {
             disabled={finish.isPending}
             onClick={() => finish.mutate()}
           >
-            {finish.isPending ? "Завершаем…" : "Завершить тренировку"}
+            {finish.isPending
+              ? continuesToWorkout ? "Переходим…" : "Завершаем…"
+              : continuesToWorkout ? "Перейти к тренировке" : "Завершить тренировку"}
           </button>
         </section>
       ) : (
