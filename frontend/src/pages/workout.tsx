@@ -11,6 +11,7 @@ import {
   getSession,
   getWorkout,
   listWorkouts,
+  normalizeWorkoutDuration,
   saveSet,
   start,
   type CompletedSet,
@@ -429,7 +430,7 @@ export function WorkoutPlayerPage() {
   },[phase,remaining,current,record.isPending]);
   const finish = useMutation({
     mutationFn: () =>
-      complete(token!, id, elapsedSeconds(query.data!.session.started_at)),
+      complete(token!, id, normalizeWorkoutDuration(elapsedSeconds(query.data!.session.started_at))),
     onSuccess: ({session:completed}) => {
       qc.invalidateQueries({ queryKey: ["progress"] });
       qc.invalidateQueries({ queryKey: ["workouts"] });
@@ -454,7 +455,7 @@ export function WorkoutPlayerPage() {
   const { workout, session } = query.data,
     total = totalSets(workout),
     done = completedCount(dataSets),
-    elapsed = elapsedSeconds(session.started_at, now),
+    elapsed = normalizeWorkoutDuration(elapsedSeconds(session.started_at, now)),
     summary = workoutSummary(dataSets),
     continuesToWorkout = !!session.follow_up_workout_id;
   const continuation=finish.data?.session.next_session?.id??finish.data?.session.continued_session_id??session.continued_session_id;

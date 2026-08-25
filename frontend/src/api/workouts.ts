@@ -16,4 +16,6 @@ export type StartWorkoutInput={planned_workout_id?:string;follow_up_workout_id?:
 export const start=(t:string,id:string,input:StartWorkoutInput={})=>api<{session:WorkoutSession}>(`/workouts/${requireEntityID(id,'Workout')}/start`,{method:'POST',body:JSON.stringify({...(input.planned_workout_id?{planned_workout_id:requireEntityID(input.planned_workout_id,'Planned workout')}:{ }),...(input.follow_up_workout_id?{follow_up_workout_id:requireEntityID(input.follow_up_workout_id,'Follow-up workout')}:{ })})},t)
 export const getSession=(t:string,id:string)=>api<ActiveWorkout>(`/workout-sessions/${requireEntityID(id,'Workout session')}`,{},t)
 export const saveSet=(t:string,s:string,x:{exercise_id:string;set_number:number;reps?:number;duration_seconds?:number;completed:true})=>api<void>(`/workout-sessions/${requireEntityID(s,'Workout session')}/sets`,{method:'POST',body:JSON.stringify(x)},t)
-export const complete=(t:string,s:string,d:number)=>api<{session:WorkoutSession}>(`/workout-sessions/${requireEntityID(s,'Workout session')}/complete?duration_seconds=${Math.max(0,Math.floor(d))}`,{method:'POST'},t)
+export const MAX_WORKOUT_DURATION_SECONDS=43200
+export const normalizeWorkoutDuration=(duration:number)=>Math.min(MAX_WORKOUT_DURATION_SECONDS,Math.max(0,Math.floor(duration)))
+export const complete=(t:string,s:string,d:number)=>api<{session:WorkoutSession}>(`/workout-sessions/${requireEntityID(s,'Workout session')}/complete?duration_seconds=${normalizeWorkoutDuration(d)}`,{method:'POST'},t)
