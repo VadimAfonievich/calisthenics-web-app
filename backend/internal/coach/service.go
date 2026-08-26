@@ -126,6 +126,7 @@ type BuilderInput struct {
 	CoachTips           string            `json:"coach_tips"`
 	MuscleGroups        []string          `json:"muscle_groups"`
 	Equipment           []string          `json:"equipment"`
+	Tags                []string          `json:"tags"`
 	Icon                string            `json:"icon"`
 	XPReward            int               `json:"xp_reward"`
 	FinalCriterionType  string            `json:"final_criterion_type"`
@@ -256,6 +257,16 @@ func validID(value string) bool          { return uuidValue.MatchString(value) }
 func validOptionalID(value *string) bool { return value == nil || validID(*value) }
 func validMapGroup(value string) bool {
 	return value == "basic" || value == "floor" || value == "bar" || value == "parallel_bars"
+}
+func validTags(values []string) bool {
+	seen := map[string]bool{}
+	for _, value := range values {
+		if value == "" || slugBase(value) != value || seen[value] {
+			return false
+		}
+		seen[value] = true
+	}
+	return true
 }
 
 func slugBase(value string) string {
@@ -540,6 +551,9 @@ func validBuilderEnums(kind string, in BuilderInput) bool {
 	if !oneOf(in.Difficulty, "beginner", "intermediate", "advanced") {
 		return false
 	}
+	if kind == "exercises" && (!oneOf(in.MovementType, "reps", "duration", "distance", "custom") || !validTags(in.Tags)) {
+		return false
+	}
 	if kind == "exercises" && !oneOf(in.MovementType, "reps", "duration", "distance", "custom") {
 		return false
 	}
@@ -594,9 +608,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			return "", ErrInvalid
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,owner_user_id,status,movement_type,coach_tips,cover_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::uuid,'draft',$10,$11,$12::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, user, in.MovementType, in.CoachTips, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,owner_user_id,status,movement_type,coach_tips,cover_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::uuid,'draft',$11,$12,$13::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, user, in.MovementType, in.CoachTips, in.CoverMediaID).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,movement_type=$12,coach_tips=$13,cover_media_id=$14::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.MovementType, in.CoachTips, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,tags=$12,movement_type=$13,coach_tips=$14,cover_media_id=$15::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, in.MovementType, in.CoachTips, in.CoverMediaID).Scan(&out)
 		}
 	case "programs":
 		if in.Name == "" || in.DurationWeeks < 1 || !validProgramWorkouts(in.Workouts) {
@@ -894,7 +908,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 	}
 	if kind == "exercises" {
 		var out string
-		e := s.pool.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,video_url,image_url,owner_user_id,status,movement_type,coach_tips,cover_media_id) SELECT name||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),description,instructions,common_mistakes,difficulty,muscle_groups,equipment,video_url,image_url,$2::uuid,'draft',movement_type,coach_tips,cover_media_id FROM exercises WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e := s.pool.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,video_url,image_url,owner_user_id,status,movement_type,coach_tips,cover_media_id) SELECT name||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,video_url,image_url,$2::uuid,'draft',movement_type,coach_tips,cover_media_id FROM exercises WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}

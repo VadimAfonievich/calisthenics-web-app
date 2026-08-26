@@ -1,0 +1,9 @@
+{
+  "difficulty": ["beginner", "intermediate", "advanced"],
+  "movement_type": ["reps", "duration", "distance", "custom"],
+  "status": ["draft", "published", "archived"],
+  "media_type": ["image", "video"],
+  "recommended_muscle_groups": ["chest","back","shoulders","biceps","triceps","forearms","core","glutes","quadriceps","hamstrings","calves","full-body"],
+  "recommended_equipment": ["none","floor","wall","pull-up-bar","parallel-bars","rings","resistance-band","bench","box"],
+  "recommended_family_tags": ["push","pull","squat","hinge","core","handstand","planche","front-lever","back-lever","muscle-up","l-sit","mobility","warm-up"]
+}

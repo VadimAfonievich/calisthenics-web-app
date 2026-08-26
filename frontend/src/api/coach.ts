@@ -85,6 +85,7 @@ export type BuilderInput = {
   coach_tips?: string;
   muscle_groups?: string[];
   equipment?: string[];
+  tags?: string[];
   category?: string;
   map_group?: "basic" | "floor" | "bar" | "parallel_bars";
   icon?: string;

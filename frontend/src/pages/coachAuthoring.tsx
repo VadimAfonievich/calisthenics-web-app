@@ -445,6 +445,7 @@ export const builderPayload = (
       coach_tips: value.coach_tips,
       muscle_groups: value.muscle_groups,
       equipment: value.equipment,
+      tags: value.tags,
     };
   if (kind === "programs")
     return {
@@ -866,6 +867,7 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
         movement_type: "reps",
         muscle_groups: ["Все тело"],
         equipment: [],
+        tags: [],
       }
     : {}),
   ...(kind === "workouts"
@@ -1200,6 +1202,8 @@ function BuilderEditor({
             >
               <option value="reps">Количество повторений</option>
               <option value="duration">Время исполнения</option>
+              <option value="distance">Дистанция</option>
+              <option value="custom">Другой критерий</option>
             </select>
           </label>
           <label>
@@ -1257,6 +1261,14 @@ function BuilderEditor({
                 })
               }
               placeholder="турник, резинка"
+            />
+          </label>
+          <label>
+            Теги навыка / семейства
+            <input
+              value={(value.tags ?? []).join(", ")}
+              onChange={(e) => change({...value,tags:e.target.value.split(",").map((x)=>x.trim().toLowerCase()).filter(Boolean)})}
+              placeholder="push, handstand, warm-up"
             />
           </label>
         </>

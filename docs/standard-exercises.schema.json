@@ -1,0 +1,18 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://calisthenics.coach/schemas/standard-exercises.schema.json",
+  "type":"object",
+  "required":["version","exercises"],
+  "properties":{
+    "version":{"const":1},
+    "exercises":{"type":"array","items":{"$ref":"#/$defs/exercise"}}
+  },
+  "$defs":{"exercise":{"type":"object","required":["key","name","description","instructions","difficulty","movement_type","muscle_groups","equipment","tags"],"properties":{
+    "key":{"type":"string","pattern":"^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "name":{"type":"string","minLength":1},"description":{"type":"string","minLength":1},"instructions":{"type":"string","minLength":1},"common_mistakes":{"type":"string"},"coach_tips":{"type":"string"},
+    "difficulty":{"enum":["beginner","intermediate","advanced"]},"movement_type":{"enum":["reps","duration","distance","custom"]},
+    "muscle_groups":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1}},"equipment":{"type":"array","uniqueItems":true,"items":{"type":"string","minLength":1}},"tags":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","pattern":"^[a-z0-9]+(?:-[a-z0-9]+)*$"}},
+    "media":{"type":"object","properties":{"image_url":{"type":"string","format":"uri","pattern":"^https://"},"video_url":{"type":"string","format":"uri","pattern":"^https://"}},"additionalProperties":false}
+  },"additionalProperties":false}},
+  "additionalProperties":false
+}

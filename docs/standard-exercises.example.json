@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "exercises": [{
+    "key": "push-up-standard",
+    "name": "Классические отжимания",
+    "description": "Базовое горизонтальное жимовое движение.",
+    "instructions": "Примите упор лёжа, удерживайте корпус прямым, опуститесь и выжмите тело вверх.",
+    "common_mistakes": "Провисание таза; локти разведены под прямым углом.",
+    "coach_tips": "Сохраняйте напряжение корпуса на протяжении всего подхода.",
+    "difficulty": "beginner",
+    "movement_type": "reps",
+    "muscle_groups": ["chest", "triceps", "core"],
+    "equipment": ["floor"],
+    "tags": ["push", "push-up"],
+    "media": {"video_url": "https://example.com/exercises/push-up-standard.mp4"}
+  }]
+}
