@@ -52,9 +52,19 @@ export function WorkoutBuilderFields({value,change,opts}:Props){
       {warmupPreview&&selectedWarmup&&<div className="card inline-preview"><b>{selectedWarmup.name}</b><p>{selectedWarmup.minutes} мин · {selectedWarmup.exercise_count} упражнений</p>{warmupDetail.isLoading&&<p>Загружаем состав…</p>}{Array.isArray(warmupDetail.data?.item.exercises)&&<ol>{(warmupDetail.data!.item.exercises as Array<Record<string,unknown>>).map((x,i)=><li key={i}>{byID.get(String(x.exercise_id))?.name??"Упражнение"}</li>)}</ol>}</div>}
     </section>
     <section className="builder-section"><p className="eyebrow">6</p><h3>Предпросмотр</h3><button type="button" className="secondary-button" onClick={()=>setWorkoutPreview(true)}>Предпросмотр тренировки</button></section>
-    {picker&&<ExercisePicker items={matched} pending={pending} existing={new Set(list.map(x=>x.exercise_id))} filters={filters} setFilters={setFilters} equipmentValues={availableEquipment} muscleValues={availableMuscles} directionValues={availableDirections} selectedOnly={selectedOnly} setSelectedOnly={setSelectedOnly} toggle={id=>setPending(current=>current.includes(id)?current.filter(x=>x!==id):[...current,id])} preview={setPreview} close={()=>{setPicker(false);setPending([])}} confirm={addPending}/>} 
+    {picker&&<ExercisePicker
+      items={matched} pending={pending} existing={new Set(list.map(x=>x.exercise_id))}
+      filters={filters} setFilters={setFilters} equipmentValues={availableEquipment}
+      muscleValues={availableMuscles} directionValues={availableDirections}
+      selectedOnly={selectedOnly} setSelectedOnly={setSelectedOnly}
+      toggle={id=>setPending(current=>current.includes(id)?current.filter(x=>x!==id):[...current,id])}
+      preview={setPreview} close={()=>{setPicker(false);setPending([])}} confirm={addPending}
+    />}
     {preview&&<ExerciseDetail option={preview} close={()=>setPreview(undefined)} add={()=>{if(!list.some(x=>x.exercise_id===preview.id)&&!pending.includes(preview.id))setPending([...pending,preview.id]);setPreview(undefined)}}/>}
-    {workoutPreview&&<WorkoutPreview value={value} items={list.map(x=>({item:x,option:byID.get(x.exercise_id)}))} warmup={selectedWarmup} close={()=>setWorkoutPreview(false)}/>} 
+    {workoutPreview&&<WorkoutPreview
+      value={value} items={list.map(x=>({item:x,option:byID.get(x.exercise_id)}))}
+      warmup={selectedWarmup} close={()=>setWorkoutPreview(false)}
+    />}
   </section>
 }
 
