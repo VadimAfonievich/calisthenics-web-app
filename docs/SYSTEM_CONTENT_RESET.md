@@ -80,3 +80,14 @@ For generation of 200 exercises, provide an AI exactly these files:
 5. `docs/SYSTEM_CONTENT_RESET.md`
 
 Generated output must be a single catalog matching `standard-exercises.schema.json`; validate it locally before any import implementation or database write.
+
+## One-time full test-content reset
+
+`cmd/production-content-reset` is a separate, deliberately destructive maintenance command for an explicitly disposable test-content database. It does not change the semantics of `content-reset --system-only`. It requires schema version 13 with `dirty=false`, the explicit `--all-test-content` scope and exactly one execution mode:
+
+```sh
+go run ./cmd/production-content-reset --all-test-content --dry-run
+go run ./cmd/production-content-reset --all-test-content --confirm
+```
+
+The command preserves `users`, `profiles`, `admin_users`, reference levels/categories, and achievement definitions. In one transaction it removes content-dependent history, schedules, earned achievements, relations, all lesson/workout/program/skill/exercise content and test media database records; it resets profile XP/streak fields and aggregate `user_progress` fields to their schema defaults. Before commit it verifies that identity/profile/admin counts did not change and every destructive target is empty. Use only after a verified restorable backup and a reviewed dry-run. It does not delete external object-storage objects.
