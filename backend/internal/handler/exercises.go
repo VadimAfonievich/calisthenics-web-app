@@ -9,13 +9,13 @@ import (
 )
 
 type ExerciseStore interface {
-	List(context.Context, string, string, string, string, string) ([]exercises.Exercise, error)
+	List(context.Context, string, string, string, string, string, string) ([]exercises.Exercise, error)
 	Get(context.Context, string) (exercises.Exercise, error)
 }
 
 func listExercises(store ExerciseStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		items, e := store.List(r.Context(), r.URL.Query().Get("difficulty"), r.URL.Query().Get("muscle_group"), r.URL.Query().Get("movement_type"), r.URL.Query().Get("equipment"), r.URL.Query().Get("tag"))
+		items, e := store.List(r.Context(), r.URL.Query().Get("difficulty"), r.URL.Query().Get("muscle_group"), r.URL.Query().Get("movement_type"), r.URL.Query().Get("equipment"), r.URL.Query().Get("tag"), r.URL.Query().Get("search"))
 		if e != nil {
 			writeError(w, 500, "EXERCISES_UNAVAILABLE", "Could not load exercises")
 			return

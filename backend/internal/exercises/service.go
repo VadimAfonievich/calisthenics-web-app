@@ -3,6 +3,8 @@ package exercises
 import (
 	"context"
 	"errors"
+	"strings"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -25,8 +27,8 @@ type Exercise struct {
 type Service struct{ pool *pgxpool.Pool }
 
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool} }
-func (s *Service) List(ctx context.Context, difficulty, muscle, movement, equipment, tag string) ([]Exercise, error) {
-	rows, e := s.pool.Query(ctx, `SELECT e.id::text,e.name,e.description,e.instructions,e.common_mistakes,e.difficulty,e.muscle_groups,e.equipment,e.tags,e.coach_tips,COALESCE(m.url,'') FROM exercises e LEFT JOIN media_assets m ON m.id=e.cover_media_id WHERE e.status='published' AND ($1='' OR e.difficulty=$1) AND ($2='' OR $2=ANY(e.muscle_groups)) AND ($3='' OR e.movement_type=$3) AND ($4='' OR $4=ANY(e.equipment)) AND ($5='' OR $5=ANY(e.tags)) ORDER BY e.difficulty,e.name`, difficulty, muscle, movement, equipment, tag)
+func (s *Service) List(ctx context.Context, difficulty, muscle, movement, equipment, tag, search string) ([]Exercise, error) {
+	rows, e := s.pool.Query(ctx, `SELECT e.id::text,e.name,e.description,e.instructions,e.common_mistakes,e.difficulty,e.muscle_groups,e.equipment,e.tags,e.coach_tips,COALESCE(m.url,'') FROM exercises e LEFT JOIN media_assets m ON m.id=e.cover_media_id WHERE e.status='published' AND ($1='' OR e.difficulty=$1) AND ($2='' OR $2=ANY(e.muscle_groups)) AND ($3='' OR e.movement_type=$3) AND ($4='' OR $4=ANY(e.equipment)) AND ($5='' OR $5=ANY(e.tags)) AND ($6='' OR e.name ILIKE '%'||$6||'%' OR e.description ILIKE '%'||$6||'%') ORDER BY e.difficulty,e.name`, difficulty, muscle, movement, equipment, tag, strings.TrimSpace(search))
 	if e != nil {
 		return nil, e
 	}

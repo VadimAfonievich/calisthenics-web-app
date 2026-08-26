@@ -1468,6 +1468,13 @@ export function WorkoutFields({
   change: (x: BuilderInput) => void;
   opts?: Awaited<ReturnType<typeof coachOptions>>;
 }) {
+  const [exerciseSearch, setExerciseSearch] = useState("");
+  const [exerciseDifficulty, setExerciseDifficulty] = useState("");
+  const matchingExercises = (opts?.exercises ?? []).filter(
+    (exercise) =>
+      exercise.name.toLowerCase().includes(exerciseSearch.trim().toLowerCase()) &&
+      (!exerciseDifficulty || exercise.difficulty === exerciseDifficulty),
+  );
   const add = () => {
       const used = new Set((value.exercises ?? []).map((x) => x.exercise_id));
       const first = opts?.exercises.find((x) => !used.has(x.id));
@@ -1533,6 +1540,27 @@ export function WorkoutFields({
         </label>
       )}
       <h3>Упражнения</h3>
+      {!!opts?.exercises.length && <>
+        <label>
+          Поиск по библиотеке
+          <input
+            type="search"
+            value={exerciseSearch}
+            onChange={(event) => setExerciseSearch(event.target.value)}
+            placeholder="Название упражнения"
+          />
+          <small>Найдено: {matchingExercises.length}. Системные упражнения доступны всем тренерам.</small>
+        </label>
+        <label>
+          Сложность
+          <select value={exerciseDifficulty} onChange={(event) => setExerciseDifficulty(event.target.value)}>
+            <option value="">Любая</option>
+            <option value="beginner">Начальный</option>
+            <option value="intermediate">Средний</option>
+            <option value="advanced">Продвинутый</option>
+          </select>
+        </label>
+      </>}
       {list.map((x, i) => {
         const timed = x.target_duration_seconds !== undefined;
         return (
@@ -1541,9 +1569,9 @@ export function WorkoutFields({
               value={x.exercise_id}
               onChange={(e) => update(i, { exercise_id: e.target.value })}
             >
-              {opts?.exercises.map((o) => (
+              {(opts?.exercises ?? []).filter((o) => o.id === x.exercise_id || matchingExercises.some((candidate) => candidate.id === o.id)).map((o) => (
                 <option value={o.id} key={o.id}>
-                  {optionName(o)}
+                  {optionName(o)} · {o.owner_user_id ? "моё" : "системное"}
                 </option>
               ))}
             </select>
