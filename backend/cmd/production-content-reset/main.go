@@ -103,8 +103,8 @@ func verifyMigration(ctx context.Context, conn *pgx.Conn) error {
 	if err := conn.QueryRow(ctx, `SELECT version,dirty FROM schema_migrations`).Scan(&version, &dirty); err != nil {
 		return err
 	}
-	if dirty || version != 13 {
-		return fmt.Errorf("requires schema version=13 dirty=false; got version=%d dirty=%t", version, dirty)
+	if dirty || version != 14 {
+		return fmt.Errorf("requires schema version=14 dirty=false; got version=%d dirty=%t", version, dirty)
 	}
 	return nil
 }

@@ -132,6 +132,7 @@ type BuilderInput struct {
 	FinalCriterionType  string            `json:"final_criterion_type"`
 	FinalCriterionValue int               `json:"final_criterion_value"`
 	CoverMediaID        *string           `json:"cover_media_id,omitempty"`
+	DemoMediaID         *string           `json:"demo_media_id,omitempty"`
 	Exercises           []BuilderExercise `json:"exercises"`
 	Levels              []BuilderLevel    `json:"levels"`
 	Requirements        []string          `json:"requirements"`
@@ -586,8 +587,14 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			return "", err
 		}
 	}
-	if strings.TrimSpace(in.Description) == "" || !validBuilderEnums(kind, in) || !validOptionalID(in.CoverMediaID) {
+	if strings.TrimSpace(in.Description) == "" || !validBuilderEnums(kind, in) || !validOptionalID(in.CoverMediaID) || !validOptionalID(in.DemoMediaID) {
 		return "", ErrInvalid
+	}
+	if kind == "exercises" && in.DemoMediaID != nil {
+		var ok bool
+		if e := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM media_assets WHERE id=$1::uuid AND status='ready' AND ($2 OR owner_user_id=$3::uuid) AND mime_type IN ('video/mp4','video/webm','image/gif','image/jpeg','image/png','image/webp') AND size_bytes<=5242880 AND (type='image' OR duration_seconds BETWEEN 1 AND 6))`, *in.DemoMediaID, role.CanManageAll(), user).Scan(&ok); e != nil || !ok {
+			return "", ErrInvalid
+		}
 	}
 	if (kind == "exercises" || kind == "programs") && in.Slug == "" {
 		var e error
@@ -608,9 +615,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			return "", ErrInvalid
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,owner_user_id,status,movement_type,coach_tips,cover_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::uuid,'draft',$11,$12,$13::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, user, in.MovementType, in.CoachTips, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,owner_user_id,status,movement_type,coach_tips,cover_media_id,demo_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::uuid,'draft',$11,$12,$13::uuid,$14::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, user, in.MovementType, in.CoachTips, in.CoverMediaID, in.DemoMediaID).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,tags=$12,movement_type=$13,coach_tips=$14,cover_media_id=$15::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, in.MovementType, in.CoachTips, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,tags=$12,movement_type=$13,coach_tips=$14,cover_media_id=$15::uuid,demo_media_id=$16::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, in.MovementType, in.CoachTips, in.CoverMediaID, in.DemoMediaID).Scan(&out)
 		}
 	case "programs":
 		if in.Name == "" || in.DurationWeeks < 1 || !validProgramWorkouts(in.Workouts) {
@@ -977,7 +984,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 	return "", fmt.Errorf("%w: duplicate %s is not available", ErrInvalid, x.table)
 }
 func (s *Service) ListMedia(ctx context.Context, user string, role Role) ([]Media, error) {
-	rows, e := s.pool.Query(ctx, `SELECT m.id::text,m.owner_user_id::text,m.type,m.status,m.storage_provider,m.storage_key,m.url,m.thumbnail_url,m.original_filename,m.mime_type,m.size_bytes,m.created_at,(SELECT count(*) FROM lessons WHERE cover_media_id=m.id OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',m.id::text)))+(SELECT count(*) FROM exercises WHERE cover_media_id=m.id)+(SELECT count(*) FROM workouts WHERE cover_media_id=m.id)+(SELECT count(*) FROM programs WHERE cover_media_id=m.id)+(SELECT count(*) FROM skills WHERE cover_media_id=m.id) FROM media_assets m WHERE $2 OR m.owner_user_id=$1::uuid ORDER BY m.created_at DESC`, user, role.CanManageAll())
+	rows, e := s.pool.Query(ctx, `SELECT m.id::text,m.owner_user_id::text,m.type,m.status,m.storage_provider,m.storage_key,m.url,m.thumbnail_url,m.original_filename,m.mime_type,m.size_bytes,m.created_at,(SELECT count(*) FROM lessons WHERE cover_media_id=m.id OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',m.id::text)))+(SELECT count(*) FROM exercises WHERE cover_media_id=m.id OR demo_media_id=m.id)+(SELECT count(*) FROM workouts WHERE cover_media_id=m.id)+(SELECT count(*) FROM programs WHERE cover_media_id=m.id)+(SELECT count(*) FROM skills WHERE cover_media_id=m.id) FROM media_assets m WHERE $2 OR m.owner_user_id=$1::uuid ORDER BY m.created_at DESC`, user, role.CanManageAll())
 	if e != nil {
 		return nil, e
 	}
@@ -1014,7 +1021,7 @@ func (s *Service) CreateExternalMedia(ctx context.Context, user string, in Media
 }
 func validMime(kind, mime string) bool {
 	if kind == "image" {
-		return mime == "image/jpeg" || mime == "image/png" || mime == "image/webp"
+		return mime == "image/jpeg" || mime == "image/png" || mime == "image/webp" || mime == "image/gif"
 	}
 	return mime == "video/mp4" || mime == "video/webm"
 }
@@ -1030,7 +1037,7 @@ func safeName(v string) string {
 }
 func (s *Service) DeleteMedia(ctx context.Context, user, id string, role Role) error {
 	var refs int
-	e := s.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM lessons WHERE cover_media_id=$1::uuid OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',$1::text)))+(SELECT count(*) FROM exercises WHERE cover_media_id=$1::uuid)+(SELECT count(*) FROM workouts WHERE cover_media_id=$1::uuid)+(SELECT count(*) FROM programs WHERE cover_media_id=$1::uuid)+(SELECT count(*) FROM skills WHERE cover_media_id=$1::uuid)`, id).Scan(&refs)
+	e := s.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM lessons WHERE cover_media_id=$1::uuid OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',$1::text)))+(SELECT count(*) FROM exercises WHERE cover_media_id=$1::uuid OR demo_media_id=$1::uuid)+(SELECT count(*) FROM workouts WHERE cover_media_id=$1::uuid)+(SELECT count(*) FROM programs WHERE cover_media_id=$1::uuid)+(SELECT count(*) FROM skills WHERE cover_media_id=$1::uuid)`, id).Scan(&refs)
 	if e != nil {
 		return e
 	}

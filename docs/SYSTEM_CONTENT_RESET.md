@@ -83,7 +83,7 @@ Generated output must be a single catalog matching `standard-exercises.schema.js
 
 ## One-time full test-content reset
 
-`cmd/production-content-reset` is a separate, deliberately destructive maintenance command for an explicitly disposable test-content database. It does not change the semantics of `content-reset --system-only`. It requires schema version 13 with `dirty=false`, the explicit `--all-test-content` scope and exactly one execution mode:
+`cmd/production-content-reset` is a separate, deliberately destructive maintenance command for an explicitly disposable test-content database. It does not change the semantics of `content-reset --system-only`. It requires schema version 14 with `dirty=false`, the explicit `--all-test-content` scope and exactly one execution mode:
 
 ```sh
 go run ./cmd/production-content-reset --all-test-content --dry-run

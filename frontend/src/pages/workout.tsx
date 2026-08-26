@@ -20,6 +20,7 @@ import {
   type WorkoutExercise,
   type WorkoutSession,
 } from "../api/workouts";
+import { ExerciseDemoMedia } from "../components/ExerciseDemoMedia";
 import { createPlanned } from "../api/calendar";
 import { isValidEntityID, workoutRoute } from "../api/entityIds";
 import {
@@ -635,6 +636,7 @@ function SetView({
     <section className="player-focus">
       <p className="eyebrow">УПРАЖНЕНИЕ {current.exerciseIndex + 1}</p>
       <h2>{x.name}</h2>
+      <ExerciseDemoMedia compact media={x.demo_media_url?{url:x.demo_media_url,type:x.demo_media_type||"video",mime_type:x.demo_media_mime_type||"video/mp4",poster_url:x.demo_poster_url}:undefined}/>
       <p>
         Подход {current.setNumber} из {x.sets}
       </p>

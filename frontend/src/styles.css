@@ -530,6 +530,36 @@ textarea {
   );
   text-align: center;
 }
+.exercise-demo {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  max-height: 42vh;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  border-radius: 18px;
+  object-fit: cover;
+  background: #0c1726;
+}
+.exercise-demo.compact {
+  max-width: 320px;
+  max-height: 32vh;
+}
+.exercise-demo-placeholder {
+  padding: 28px 16px;
+  border: 1px dashed rgb(116 166 219 / 0.35);
+  border-radius: 18px;
+  color: var(--tg-muted);
+  text-align: center;
+}
+@media (max-width: 414px) {
+  .exercise-demo {
+    max-height: 34vh;
+  }
+  .exercise-demo.compact {
+    max-height: 28vh;
+  }
+}
 .player-focus h2,
 .player-focus p {
   margin: 0;

@@ -20,7 +20,7 @@ func TestLessonBlockValidation(t *testing.T) {
 	}
 }
 func TestMediaValidationAndFilenameSafety(t *testing.T) {
-	if !validMime("image", "image/webp") || validMime("image", "text/html") || !validMime("video", "video/mp4") {
+	if !validMime("image", "image/webp") || !validMime("image", "image/gif") || validMime("image", "text/html") || !validMime("video", "video/mp4") || !validMime("video", "video/webm") {
 		t.Fatal("mime validation failed")
 	}
 	if got := safeName("../../secret.png"); got != ".._.._secret.png" {

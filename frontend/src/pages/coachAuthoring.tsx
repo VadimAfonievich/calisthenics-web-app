@@ -446,6 +446,7 @@ export const builderPayload = (
       muscle_groups: value.muscle_groups,
       equipment: value.equipment,
       tags: value.tags,
+      demo_media_id: value.demo_media_id,
     };
   if (kind === "programs")
     return {
@@ -1091,6 +1092,7 @@ function BuilderEditor({
   const cover = String(
     (value as BuilderInput & { cover_media_id?: string }).cover_media_id ?? "",
   );
+  const demo = String(value.demo_media_id ?? "");
   return (
     <form
       className={`stack coach-editor-page ${readOnly ? "system-view" : ""}`}
@@ -1192,6 +1194,31 @@ function BuilderEditor({
       </Link>
       {kind === "exercises" && (
         <>
+          <label>
+            Демонстрация упражнения
+            <select
+              disabled={readOnly}
+              value={demo}
+              onChange={(e) =>
+                change({
+                  ...value,
+                  demo_media_id: e.target.value || undefined,
+                })
+              }
+            >
+              <option value="">Демонстрация пока не добавлена</option>
+              {mediaOptions.map((x) => (
+                <option value={x.id} key={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </select>
+            <small>
+              MP4/WebM/GIF или статичное изображение, до 5 МБ; видео 1–6
+              секунд. Загрузка файлов требует настроенного object storage, сейчас
+              можно выбрать зарегистрированный asset.
+            </small>
+          </label>
           <label>
             Как измерять выполнение
             <select

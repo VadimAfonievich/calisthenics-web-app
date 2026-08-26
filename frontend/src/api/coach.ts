@@ -93,6 +93,7 @@ export type BuilderInput = {
   final_criterion_type?: string;
   final_criterion_value?: number;
   cover_media_id?: string;
+  demo_media_id?: string;
   exercises?: BuilderExercise[];
   levels?: BuilderLevel[];
   requirements?: string[];

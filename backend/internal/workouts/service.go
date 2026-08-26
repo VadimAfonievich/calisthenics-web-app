@@ -26,6 +26,10 @@ type Exercise struct {
 	TargetReps     *int16 `json:"target_reps,omitempty"`
 	TargetDuration *int32 `json:"target_duration_seconds,omitempty"`
 	Rest           int32  `json:"rest_seconds"`
+	DemoMediaURL   string `json:"demo_media_url,omitempty"`
+	DemoMediaType  string `json:"demo_media_type,omitempty"`
+	DemoMediaMIME  string `json:"demo_media_mime_type,omitempty"`
+	DemoPosterURL  string `json:"demo_poster_url,omitempty"`
 }
 type Workout struct {
 	ID              string     `json:"id"`
@@ -122,14 +126,14 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 			return w, e
 		}
 	}
-	rows, e := s.pool.Query(ctx, `SELECT we.exercise_id::text,e.name,we.sets,we.target_reps,we.target_duration_seconds,we.rest_seconds FROM workout_exercises we JOIN exercises e ON e.id=we.exercise_id WHERE we.workout_id=$1::uuid ORDER BY we.sort_order`, id)
+	rows, e := s.pool.Query(ctx, `SELECT we.exercise_id::text,e.name,we.sets,we.target_reps,we.target_duration_seconds,we.rest_seconds,COALESCE(dm.url,''),COALESCE(dm.type,''),COALESCE(dm.mime_type,''),COALESCE(dm.thumbnail_url,'') FROM workout_exercises we JOIN exercises e ON e.id=we.exercise_id LEFT JOIN media_assets dm ON dm.id=e.demo_media_id WHERE we.workout_id=$1::uuid ORDER BY we.sort_order`, id)
 	if e != nil {
 		return w, e
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var x Exercise
-		if e = rows.Scan(&x.ID, &x.Name, &x.Sets, &x.TargetReps, &x.TargetDuration, &x.Rest); e != nil {
+		if e = rows.Scan(&x.ID, &x.Name, &x.Sets, &x.TargetReps, &x.TargetDuration, &x.Rest, &x.DemoMediaURL, &x.DemoMediaType, &x.DemoMediaMIME, &x.DemoPosterURL); e != nil {
 			return w, e
 		}
 		w.Exercises = append(w.Exercises, x)
