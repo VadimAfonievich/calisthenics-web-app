@@ -17,3 +17,5 @@ go run ./cmd/exercise-demo-media --file ../docs/exercise-demo-media.json --confi
 ```
 
 Only owned/original, licensed, purpose-generated, or license-compliant stock/CC media may be used. Do not copy media from fitness applications. Replacing a relation does not delete the old asset. Media Library reference checks include `demo_media_id`, preventing deletion while used. External object deletion is outside this foundation.
+
+The production encoding, S3 configuration, upload helper, first-batch plan, failure semantics, and device acceptance checklist are documented in [STANDARD_EXERCISE_DEMO_PRODUCTION.md](STANDARD_EXERCISE_DEMO_PRODUCTION.md).

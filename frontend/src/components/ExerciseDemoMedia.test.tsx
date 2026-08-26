@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExerciseDemoMedia } from "./ExerciseDemoMedia";
 
 beforeEach(() =>
-  vi.stubGlobal(
+  {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.stubGlobal(
     "matchMedia",
     vi.fn().mockReturnValue({
       matches: false,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }),
-  ),
+    );
+  },
 );
 afterEach(() => {
   cleanup();
@@ -87,6 +90,24 @@ describe("ExerciseDemoMedia", () => {
         }}
       />,
     );
+    expect(screen.getByRole("img").getAttribute("src")).toContain("poster");
+  });
+
+  it("falls back without a fatal error when autoplay is rejected", async () => {
+    vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(
+      new DOMException("Autoplay rejected", "NotAllowedError"),
+    );
+    render(
+      <ExerciseDemoMedia
+        media={{
+          url: "https://example.com/demo.mp4",
+          poster_url: "https://example.com/poster.webp",
+          type: "video",
+          mime_type: "video/mp4",
+        }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("img")).toBeTruthy());
     expect(screen.getByRole("img").getAttribute("src")).toContain("poster");
   });
 

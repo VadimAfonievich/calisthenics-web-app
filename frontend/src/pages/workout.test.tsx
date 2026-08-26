@@ -15,7 +15,7 @@ vi.mock('../api/skills',()=>({listSkills:vi.fn().mockResolvedValue({skills:[]})}
 const workout={id:'50000000-0000-0000-0000-000000000001',title:'Стойка на руках — уровень 1',description:'Подготовительная тренировка',estimated_minutes:30,difficulty:'beginner',program_id:'40000000-0000-0000-0000-000000000001',program_name:'Путь к стойке на руках',exercises:[{id:'30000000-0000-0000-0000-000000000001',name:'Hollow Body Hold',sets:3,target_duration_seconds:20,rest_seconds:45}]}
 const wrapper=(ui:ReactNode,path='/workouts')=>render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}})}><MemoryRouter initialEntries={[path]}>{ui}</MemoryRouter></QueryClientProvider>)
 
-beforeEach(()=>{useSessionStore.setState({accessToken:'token',status:'authenticated'});vi.clearAllMocks()})
+beforeEach(()=>{useSessionStore.setState({accessToken:'token',status:'authenticated'});vi.clearAllMocks();vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue()})
 afterEach(cleanup)
 
 describe('workout pages',()=>{

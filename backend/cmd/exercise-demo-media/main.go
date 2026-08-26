@@ -6,11 +6,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type mapping struct {
@@ -47,7 +49,7 @@ func validate(m manifest) error {
 	}
 	seen := map[string]bool{}
 	for _, x := range m.Mappings {
-		if !keyRE.MatchString(x.StandardKey) || !idRE.MatchString(x.MediaAssetID) || seen[x.StandardKey] {
+		if !keyRE.MatchString(x.StandardKey) || (x.MediaAssetID != "" && !idRE.MatchString(x.MediaAssetID)) || seen[x.StandardKey] {
 			return fmt.Errorf("invalid or duplicate mapping: %s", x.StandardKey)
 		}
 		seen[x.StandardKey] = true
@@ -79,9 +81,18 @@ func run() error {
 	if e = validate(m); e != nil {
 		return e
 	}
-	fmt.Printf("VALID: %d demo mappings\n", len(m.Mappings))
+	pending := 0
+	for _, mapping := range m.Mappings {
+		if mapping.MediaAssetID == "" {
+			pending++
+		}
+	}
+	fmt.Printf("VALID: %d demo mappings pending_media=%d\n", len(m.Mappings), pending)
 	if *valid {
 		return nil
+	}
+	if pending > 0 {
+		return errors.New("pending media_asset_id values block database modes")
 	}
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -98,28 +109,43 @@ func run() error {
 		Current *string
 	}
 	items := []item{}
-	attach, unchanged, conflicts := 0, 0, 0
+	attach, replace, unchanged, missing, conflicts := 0, 0, 0, 0, 0
 	for _, x := range m.Mappings {
 		var current *string
+		e = pool.QueryRow(ctx, `SELECT demo_media_id::text FROM exercises WHERE standard_key=$1 AND owner_user_id IS NULL`, x.StandardKey).Scan(&current)
+		if errors.Is(e, pgx.ErrNoRows) {
+			missing++
+			continue
+		}
+		if e != nil {
+			return e
+		}
 		var ok bool
-		e = pool.QueryRow(ctx, `SELECT e.demo_media_id::text,(m.id IS NOT NULL AND m.status='ready' AND m.mime_type IN ('video/mp4','video/webm','image/gif','image/jpeg','image/png','image/webp') AND m.size_bytes<=5242880 AND (m.type='image' OR m.duration_seconds BETWEEN 1 AND 6)) FROM exercises e LEFT JOIN media_assets m ON m.id=$2::uuid WHERE e.standard_key=$1 AND e.owner_user_id IS NULL`, x.StandardKey, x.MediaAssetID).Scan(&current, &ok)
-		if e != nil || !ok {
+		e = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM media_assets WHERE id=$1::uuid AND status='ready' AND mime_type IN ('video/mp4','video/webm','image/gif','image/jpeg','image/png','image/webp') AND size_bytes<=5242880 AND (type='image' OR duration_seconds BETWEEN 1 AND 6))`, x.MediaAssetID).Scan(&ok)
+		if e != nil {
+			return e
+		}
+		if !ok {
 			conflicts++
 			continue
 		}
 		if current != nil && *current == x.MediaAssetID {
 			unchanged++
 		} else {
-			attach++
+			if current == nil {
+				attach++
+			} else {
+				replace++
+			}
 			items = append(items, item{x, current})
 		}
 	}
-	fmt.Printf("PLAN: attach=%d unchanged=%d conflicts=%d\n", attach, unchanged, conflicts)
+	fmt.Printf("PLAN: attach=%d replace=%d unchanged=%d missing=%d conflicts=%d\n", attach, replace, unchanged, missing, conflicts)
 	if *dry {
 		return nil
 	}
-	if conflicts > 0 {
-		return errors.New("conflicts block attachment")
+	if conflicts > 0 || missing > 0 {
+		return errors.New("missing exercises or conflicts block attachment")
 	}
 	tx, e := pool.Begin(ctx)
 	if e != nil {

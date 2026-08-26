@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "mappings": [
+    {"standard_key": "push-up-standard", "media_asset_id": null},
+    {"standard_key": "pull-up-standard", "media_asset_id": null},
+    {"standard_key": "bodyweight-squat", "media_asset_id": null},
+    {"standard_key": "front-plank", "media_asset_id": null},
+    {"standard_key": "dip-standard", "media_asset_id": null},
+    {"standard_key": "shoulder-circles", "media_asset_id": null},
+    {"standard_key": "wrist-circles", "media_asset_id": null},
+    {"standard_key": "pelvic-circles", "media_asset_id": null},
+    {"standard_key": "ankle-circles", "media_asset_id": null},
+    {"standard_key": "wall-walk", "media_asset_id": null},
+    {"standard_key": "wall-handstand-facing-wall", "media_asset_id": null},
+    {"standard_key": "tuck-planche", "media_asset_id": null},
+    {"standard_key": "tuck-front-lever", "media_asset_id": null},
+    {"standard_key": "band-muscle-up", "media_asset_id": null},
+    {"standard_key": "l-sit-parallettes", "media_asset_id": null},
+    {"standard_key": "australian-row-low", "media_asset_id": null}
+  ]
+}

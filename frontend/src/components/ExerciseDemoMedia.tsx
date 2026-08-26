@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type DemoMedia = {
   url: string;
@@ -17,9 +17,14 @@ export function ExerciseDemoMedia({
   label?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const [playbackFailed, setPlaybackFailed] = useState(false);
   const [reduced, setReduced] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  useEffect(() => setFailed(false), [media?.url]);
+  useEffect(() => {
+    setFailed(false);
+    setPlaybackFailed(false);
+  }, [media?.url]);
   useEffect(() => {
     const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
     if (!query) return;
@@ -28,6 +33,11 @@ export function ExerciseDemoMedia({
     query.addEventListener?.("change", sync);
     return () => query.removeEventListener?.("change", sync);
   }, []);
+  useEffect(() => {
+    if (reduced || media?.type !== "video" || !videoRef.current) return;
+    const playback = videoRef.current.play();
+    playback?.catch(() => setPlaybackFailed(true));
+  }, [media?.type, media?.url, reduced]);
 
   if (!media || failed) {
     return compact ? null : (
@@ -36,7 +46,7 @@ export function ExerciseDemoMedia({
       </div>
     );
   }
-  if (media.type === "image" || reduced) {
+  if (media.type === "image" || reduced || playbackFailed) {
     return media.poster_url || media.type === "image" ? (
       <img
         className={`exercise-demo ${compact ? "compact" : ""}`}
@@ -47,12 +57,15 @@ export function ExerciseDemoMedia({
       />
     ) : (
       <div className="exercise-demo-placeholder">
-        Анимация отключена в настройках движения
+        {playbackFailed
+          ? "Автовоспроизведение недоступно"
+          : "Анимация отключена в настройках движения"}
       </div>
     );
   }
   return (
     <video
+      ref={videoRef}
       className={`exercise-demo ${compact ? "compact" : ""}`}
       aria-label={label}
       src={media.url}

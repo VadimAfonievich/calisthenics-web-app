@@ -23,3 +23,10 @@ func TestManifestValidationRejectsMalformedUUIDAndKey(t *testing.T) {
 		}
 	}
 }
+
+func TestManifestValidationAllowsPendingProductionAssets(t *testing.T) {
+	pending := manifest{Version: 1, Mappings: []mapping{{StandardKey: "push-up-standard"}}}
+	if err := validate(pending); err != nil {
+		t.Fatalf("pending production manifest rejected: %v", err)
+	}
+}
