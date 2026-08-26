@@ -4369,6 +4369,1042 @@
         "mobility",
         "warm-up"
       ]
+    },
+    {
+      "key": "neck-side-tilt",
+      "name": "Шея: наклоны головы в стороны",
+      "description": "Мягкая разминка боковых мышц шеи.",
+      "instructions": "Плавно наклоняйте голову к каждому плечу в комфортной амплитуде.",
+      "common_mistakes": "Подъём плеч и давление рукой на голову.",
+      "coach_tips": "Держите плечи расслабленными и двигайтесь без боли.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "neck"
+      ]
+    },
+    {
+      "key": "neck-flexion-extension",
+      "name": "Наклоны головы вперёд и назад",
+      "description": "Контролируемая подвижность шеи в продольном направлении.",
+      "instructions": "Опустите подбородок к груди, затем вернитесь и слегка направьте взгляд вверх без резкого запрокидывания.",
+      "common_mistakes": "Резкое движение и чрезмерное разгибание.",
+      "coach_tips": "Используйте небольшую комфортную амплитуду.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "neck"
+      ]
+    },
+    {
+      "key": "neck-rotation",
+      "name": "Повороты головы в стороны",
+      "description": "Мягкая подготовка шеи к движению.",
+      "instructions": "Плавно поворачивайте голову влево и вправо, сохраняя подбородок на одном уровне.",
+      "common_mistakes": "Разворот корпуса вместе с головой.",
+      "coach_tips": "Остановитесь до появления дискомфорта.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "neck"
+      ]
+    },
+    {
+      "key": "neck-semicircle",
+      "name": "Полукруги головой",
+      "description": "Контролируемое движение шеи через переднюю дугу.",
+      "instructions": "Опустите подбородок и медленно проведите голову полукругом от одного плеча к другому.",
+      "common_mistakes": "Полный быстрый круг с сильным запрокидыванием.",
+      "coach_tips": "Двигайтесь только через переднюю безопасную дугу.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "neck"
+      ]
+    },
+    {
+      "key": "neck-axial-elongation",
+      "name": "Мягкое вытяжение шеи",
+      "description": "Спокойная настройка положения головы и шеи.",
+      "instructions": "Макушкой тянитесь вверх, слегка уберите подбородок назад и удерживайте ровную осанку.",
+      "common_mistakes": "Сильное давление подбородком вниз.",
+      "coach_tips": "Представьте, что шея становится длиннее, без напряжения.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "shoulders"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "neck"
+      ]
+    },
+    {
+      "key": "wrist-flexion-extension",
+      "name": "Кисть: сгибание и разгибание",
+      "description": "Динамическая подготовка лучезапястных суставов.",
+      "instructions": "Вытяните руки и плавно направляйте ладони вверх и вниз.",
+      "common_mistakes": "Рывки и напряжённые локти.",
+      "coach_tips": "Начните с небольшой амплитуды.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "forearms"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "wrist",
+        "handstand"
+      ]
+    },
+    {
+      "key": "wrist-flexor-stretch",
+      "name": "Вытяжение сгибателей кисти",
+      "description": "Мягкая подготовка внутренней стороны предплечья.",
+      "instructions": "Вытяните руку ладонью вверх и другой рукой слегка направьте пальцы вниз.",
+      "common_mistakes": "Сильное давление и боль в запястье.",
+      "coach_tips": "Удерживайте мягкое натяжение без боли.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "forearms"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "wrist",
+        "handstand"
+      ]
+    },
+    {
+      "key": "wrist-extensor-stretch",
+      "name": "Вытяжение разгибателей кисти",
+      "description": "Мягкая подготовка наружной стороны предплечья.",
+      "instructions": "Вытяните руку ладонью вниз и аккуратно направьте кисть к себе.",
+      "common_mistakes": "Скручивание локтя и чрезмерное давление.",
+      "coach_tips": "Плечо и локоть оставляйте расслабленными.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "forearms"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "wrist",
+        "planche"
+      ]
+    },
+    {
+      "key": "elbow-circles",
+      "name": "Круговые движения локтями",
+      "description": "Мягкая суставная подготовка локтей.",
+      "instructions": "Согните руки и выполняйте небольшие контролируемые круги предплечьями.",
+      "common_mistakes": "Резкие широкие махи.",
+      "coach_tips": "Двигайтесь плавно в обе стороны.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "biceps",
+        "triceps",
+        "forearms"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "elbow"
+      ]
+    },
+    {
+      "key": "elbow-flexion-extension",
+      "name": "Сгибание и разгибание рук",
+      "description": "Разогрев локтей и мышц рук.",
+      "instructions": "Плавно сгибайте руки к плечам и полностью, но мягко разгибайте их.",
+      "common_mistakes": "Резкое выпрямление в замок.",
+      "coach_tips": "Сохраняйте контролируемый темп.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "biceps",
+        "triceps"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "elbow"
+      ]
+    },
+    {
+      "key": "forearm-pronation-supination",
+      "name": "Пронация и супинация предплечий",
+      "description": "Подготовка предплечий и локтей к хвату и упорам.",
+      "instructions": "Прижмите локти к корпусу и плавно разворачивайте ладони вверх и вниз.",
+      "common_mistakes": "Движение всем плечом вместо предплечья.",
+      "coach_tips": "Локти остаются неподвижными.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "forearms"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "elbow",
+        "wrist"
+      ]
+    },
+    {
+      "key": "alternating-arm-circles",
+      "name": "Попеременные круги руками",
+      "description": "Координационная разминка плечевых суставов.",
+      "instructions": "Выполняйте круг вперёд одной рукой, затем другой, сохраняя спокойный корпус.",
+      "common_mistakes": "Слишком быстрые неконтролируемые махи.",
+      "coach_tips": "Постепенно увеличивайте амплитуду.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "shoulder"
+      ]
+    },
+    {
+      "key": "arm-swings-front-back",
+      "name": "Махи руками вперёд и назад",
+      "description": "Динамический разогрев плеч и грудных мышц.",
+      "instructions": "Свободно проведите прямые руки вперёд, затем назад в комфортном диапазоне.",
+      "common_mistakes": "Прогиб в пояснице и резкие махи.",
+      "coach_tips": "Держите рёбра собранными.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders",
+        "chest",
+        "back"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "shoulder"
+      ]
+    },
+    {
+      "key": "arm-open-close",
+      "name": "Сведение и разведение рук",
+      "description": "Подготовка груди, спины и плеч.",
+      "instructions": "Разведите руки в стороны, затем мягко сведите их перед собой, чередуя верхнюю руку.",
+      "common_mistakes": "Рывок в крайнем положении.",
+      "coach_tips": "Двигайтесь ритмично без боли.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders",
+        "chest",
+        "back"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "shoulder"
+      ]
+    },
+    {
+      "key": "standing-scapular-glide",
+      "name": "Сведение и разведение лопаток стоя",
+      "description": "Осознанная активация лопаток без сгибания рук.",
+      "instructions": "Вытяните руки вперёд, разведите лопатки, затем мягко сведите их.",
+      "common_mistakes": "Подъём плеч к ушам и прогиб корпуса.",
+      "coach_tips": "Двигайте лопатками, а не локтями.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders",
+        "back"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "shoulder"
+      ]
+    },
+    {
+      "key": "wall-shoulder-flexion",
+      "name": "Подъём рук у стены",
+      "description": "Подготовка сгибания плеч для вертикальных положений.",
+      "instructions": "Прижмите спину к стене и плавно поднимайте прямые руки вверх без боли.",
+      "common_mistakes": "Отрыв рёбер и сильный прогиб в пояснице.",
+      "coach_tips": "Сохраняйте корпус собранным.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders",
+        "back"
+      ],
+      "equipment": [
+        "wall"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "shoulder",
+        "handstand"
+      ]
+    },
+    {
+      "key": "standing-torso-twist",
+      "name": "Повороты корпуса в стороны",
+      "description": "Динамическая подготовка корпуса к ротации.",
+      "instructions": "Стойте устойчиво и плавно поворачивайте грудную клетку влево и вправо.",
+      "common_mistakes": "Резкое скручивание коленей.",
+      "coach_tips": "Таз оставляйте направленным вперёд.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "core",
+        "back"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "thoracic",
+        "core"
+      ]
+    },
+    {
+      "key": "standing-side-bend",
+      "name": "Наклоны корпуса в стороны",
+      "description": "Разминка боковых линий корпуса.",
+      "instructions": "Скользите рукой вдоль бедра и наклоняйтесь поочерёдно в стороны.",
+      "common_mistakes": "Поворот корпуса и завал вперёд.",
+      "coach_tips": "Удлиняйте бок без сжатия поясницы.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "core",
+        "back"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "thoracic",
+        "core"
+      ]
+    },
+    {
+      "key": "standing-forward-fold-dynamic",
+      "name": "Динамический наклон корпуса вперёд",
+      "description": "Мягкая подготовка задней поверхности тела.",
+      "instructions": "Слегка согните колени, наклонитесь от таза и плавно вернитесь вверх.",
+      "common_mistakes": "Рывок к полу и округление под нагрузкой.",
+      "coach_tips": "Не стремитесь сразу коснуться пола.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "hamstrings",
+        "glutes",
+        "back"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "thoracic"
+      ]
+    },
+    {
+      "key": "standing-gentle-back-extension",
+      "name": "Мягкое разгибание корпуса назад",
+      "description": "Контролируемая подготовка передней линии корпуса.",
+      "instructions": "Положите ладони на таз, слегка подайте грудную клетку вверх и вернитесь.",
+      "common_mistakes": "Сильный прогиб только в пояснице.",
+      "coach_tips": "Амплитуда небольшая и без боли.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "core",
+        "back"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "thoracic"
+      ]
+    },
+    {
+      "key": "torso-circles",
+      "name": "Круговые движения корпусом",
+      "description": "Плавная разминка корпуса и таза.",
+      "instructions": "Выполняйте медленный круг корпусом в комфортной амплитуде в обе стороны.",
+      "common_mistakes": "Быстрые глубокие наклоны.",
+      "coach_tips": "Начните с малого круга.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "core",
+        "back",
+        "glutes"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "thoracic",
+        "hip"
+      ]
+    },
+    {
+      "key": "standing-thoracic-open-book",
+      "name": "Раскрытие грудного отдела стоя",
+      "description": "Мобильность грудного отдела и плеч.",
+      "instructions": "Вытяните руки вперёд и поочерёдно раскрывайте одну руку в сторону, следуя за ней взглядом.",
+      "common_mistakes": "Разворот таза и резкий мах рукой.",
+      "coach_tips": "Двигайтесь за счёт грудного отдела.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "back",
+        "shoulders",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "thoracic"
+      ]
+    },
+    {
+      "key": "pelvic-circles",
+      "name": "Круговые движения тазом",
+      "description": "Суставная разминка таза и пояснично-тазовой области.",
+      "instructions": "Плавно описывайте тазом круг в обе стороны при устойчивых стопах.",
+      "common_mistakes": "Резкие движения и чрезмерный прогиб.",
+      "coach_tips": "Круг должен оставаться комфортным.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "pelvic-tilt-standing",
+      "name": "Наклоны таза вперёд и назад",
+      "description": "Развитие контроля нейтрального положения таза.",
+      "instructions": "Стоя слегка подкрутите таз, затем мягко верните его назад.",
+      "common_mistakes": "Движение грудной клеткой вместо таза.",
+      "coach_tips": "Сохраняйте колени расслабленными.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip",
+        "core"
+      ]
+    },
+    {
+      "key": "pelvic-side-shift",
+      "name": "Боковые смещения таза",
+      "description": "Мягкая подготовка таза к движениям в стороны.",
+      "instructions": "Переносите таз влево и вправо, сохраняя стопы на полу.",
+      "common_mistakes": "Поворот таза и отрыв стоп.",
+      "coach_tips": "Двигайтесь медленно и симметрично.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "hip-circles-forward",
+      "name": "Круговые движения бедром вперёд",
+      "description": "Динамическая разминка тазобедренного сустава.",
+      "instructions": "Поднимите колено и проведите бедро контролируемым кругом вперёд.",
+      "common_mistakes": "Раскачивание корпуса и рывок ногой.",
+      "coach_tips": "Держитесь за опору при необходимости.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "core",
+        "quadriceps"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "hip-circles-backward",
+      "name": "Круговые движения бедром назад",
+      "description": "Подготовка тазобедренного сустава в обратном направлении.",
+      "instructions": "Поднимите колено в сторону и плавно проведите бедро назад и вниз.",
+      "common_mistakes": "Прогиб в пояснице и потеря равновесия.",
+      "coach_tips": "Сохраняйте корпус вертикальным.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "core",
+        "hamstrings"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "hip-open-close",
+      "name": "Открытие и закрытие бедра",
+      "description": "Контролируемая ротация в тазобедренном суставе.",
+      "instructions": "Поднимите согнутое колено, отведите его наружу и верните обратно.",
+      "common_mistakes": "Разворот всего таза вслед за ногой.",
+      "coach_tips": "Амплитуда только комфортная.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "leg-swing-front-back",
+      "name": "Махи ногой вперёд и назад",
+      "description": "Динамическая подготовка сгибателей бедра и задней поверхности ноги.",
+      "instructions": "Держась за опору, выполняйте контролируемые махи прямой ногой вперёд и назад.",
+      "common_mistakes": "Сильное раскачивание корпуса.",
+      "coach_tips": "Начните с небольшой амплитуды.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "hamstrings",
+        "quadriceps"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "leg-swing-side-to-side",
+      "name": "Махи ногой в стороны",
+      "description": "Динамическая подготовка внутренней и наружной поверхности бедра.",
+      "instructions": "Держась за опору, плавно проводите ногу перед собой из стороны в сторону.",
+      "common_mistakes": "Разворот стопы и корпуса без контроля.",
+      "coach_tips": "Таз держите ровно.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "quadriceps",
+        "hamstrings"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "standing-hip-opener",
+      "name": "Динамическое раскрытие бедра",
+      "description": "Мягкая мобильность тазобедренных суставов стоя.",
+      "instructions": "Подтяните колено к груди, отведите его наружу и спокойно поставьте стопу.",
+      "common_mistakes": "Рывок коленом и завал корпуса.",
+      "coach_tips": "Используйте опору для баланса.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "glutes",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "hip"
+      ]
+    },
+    {
+      "key": "knee-flexion-extension",
+      "name": "Мягкое сгибание и разгибание коленей",
+      "description": "Подготовка коленных суставов к приседаниям и шагам.",
+      "instructions": "Поставьте стопы устойчиво и выполняйте неглубокие сгибания коленей по линии носков.",
+      "common_mistakes": "Колени заваливаются внутрь.",
+      "coach_tips": "Давление распределяйте по всей стопе.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "quadriceps",
+        "glutes"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "knee",
+        "squat"
+      ]
+    },
+    {
+      "key": "knee-circles-small",
+      "name": "Малые круги коленями",
+      "description": "Мягкая суставная подготовка коленей в небольшой амплитуде.",
+      "instructions": "Слегка согните колени, положите ладони выше чашечек и выполняйте малые круги без боли.",
+      "common_mistakes": "Глубокое агрессивное скручивание.",
+      "coach_tips": "Круги небольшие, стопы сохраняют контакт с полом.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "quadriceps",
+        "glutes"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "knee"
+      ]
+    },
+    {
+      "key": "marching-knee-lifts",
+      "name": "Поочерёдные подъёмы коленей",
+      "description": "Лёгкая динамическая подготовка ног и корпуса.",
+      "instructions": "Маршируйте на месте, поочерёдно поднимая колени до комфортной высоты.",
+      "common_mistakes": "Завал корпуса назад и жёсткое приземление.",
+      "coach_tips": "Ставьте стопу мягко.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "quadriceps",
+        "glutes",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "knee",
+        "hip",
+        "core"
+      ]
+    },
+    {
+      "key": "ankle-circles",
+      "name": "Круговые движения голеностопом",
+      "description": "Суставная подготовка голеностопа.",
+      "instructions": "Поднимите одну стопу и плавно выполняйте круги в обе стороны.",
+      "common_mistakes": "Движение всей ногой вместо стопы.",
+      "coach_tips": "Используйте опору и комфортную амплитуду.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "calves"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "ankle"
+      ]
+    },
+    {
+      "key": "heel-toe-rocks",
+      "name": "Перекаты с пятки на носок",
+      "description": "Динамическая разминка стоп, икр и голеностопа.",
+      "instructions": "Плавно перекатывайтесь с пяток на носки, сохраняя равновесие.",
+      "common_mistakes": "Резкое падение на пятки.",
+      "coach_tips": "Двигайтесь мягко и контролируемо.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "calves"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "ankle"
+      ]
+    },
+    {
+      "key": "toe-raises",
+      "name": "Подъёмы носков",
+      "description": "Активация передней поверхности голени и стоп.",
+      "instructions": "Оставляя пятки на полу, поднимайте носки и плавно опускайте их.",
+      "common_mistakes": "Перенос веса назад без контроля.",
+      "coach_tips": "При необходимости держитесь за стену.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "calves"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "ankle"
+      ]
+    },
+    {
+      "key": "ankle-pumps",
+      "name": "Динамическая работа стопой",
+      "description": "Мягкая подготовка голеностопа и ахилла.",
+      "instructions": "Поочерёдно вытягивайте носок от себя и направляйте его к себе.",
+      "common_mistakes": "Рывки и судорожное напряжение пальцев.",
+      "coach_tips": "Двигайте стопой плавно в полном комфортном диапазоне.",
+      "difficulty": "beginner",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "calves"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "ankle"
+      ]
+    },
+    {
+      "key": "jogging-in-place-light",
+      "name": "Лёгкий бег на месте",
+      "description": "Плавное повышение температуры тела перед нагрузкой.",
+      "instructions": "Бегите на месте в лёгком темпе с мягкой постановкой стоп.",
+      "common_mistakes": "Слишком высокий темп с первых секунд.",
+      "coach_tips": "Начните спокойно и постепенно ускорьтесь.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "full-body"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up"
+      ]
+    },
+    {
+      "key": "jumping-jacks-light",
+      "name": "Лёгкие прыжки ноги вместе — ноги врозь",
+      "description": "Общая динамическая разминка всего тела.",
+      "instructions": "Мягко разводите ноги прыжком и поднимайте руки, затем возвращайтесь.",
+      "common_mistakes": "Жёсткое приземление и чрезмерный темп.",
+      "coach_tips": "Делайте шаги вместо прыжков при необходимости.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "full-body"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up"
+      ]
+    },
+    {
+      "key": "high-knees-light",
+      "name": "Лёгкие высокие колени",
+      "description": "Динамическая подготовка ног и корпуса.",
+      "instructions": "Бегите на месте, поднимая колени до комфортной высоты.",
+      "common_mistakes": "Завал корпуса назад и тяжёлые приземления.",
+      "coach_tips": "Сохраняйте умеренный темп.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "quadriceps",
+        "glutes",
+        "core"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "core"
+      ]
+    },
+    {
+      "key": "butt-kicks-light",
+      "name": "Лёгкий захлёст голени",
+      "description": "Подготовка коленей и задней поверхности бедра.",
+      "instructions": "Легко бегите на месте, направляя пятки к ягодицам без рывка.",
+      "common_mistakes": "Сильный удар пяткой и прогиб корпуса.",
+      "coach_tips": "Колени держите направленными вниз.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "hamstrings",
+        "quadriceps"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "knee"
+      ]
+    },
+    {
+      "key": "inchworm-walkout",
+      "name": "Выход руками в планку",
+      "description": "Динамическая подготовка плеч, корпуса и задней поверхности ног.",
+      "instructions": "Наклонитесь, шагайте руками до планки и вернитесь обратно в комфортной амплитуде.",
+      "common_mistakes": "Провисание поясницы в планке.",
+      "coach_tips": "Сгибайте колени, если не хватает мобильности.",
+      "difficulty": "intermediate",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders",
+        "core",
+        "hamstrings"
+      ],
+      "equipment": [
+        "floor"
+      ],
+      "tags": [
+        "warm-up",
+        "mobility",
+        "core"
+      ]
+    },
+    {
+      "key": "bear-walk-light",
+      "name": "Лёгкая медвежья ходьба",
+      "description": "Координационная подготовка плеч, корпуса и ног.",
+      "instructions": "Идите на четвереньках с коленями невысоко над полом короткими контролируемыми шагами.",
+      "common_mistakes": "Высокий таз и потеря контроля корпуса.",
+      "coach_tips": "Двигайтесь медленно и держите спину устойчивой.",
+      "difficulty": "intermediate",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "full-body",
+        "shoulders",
+        "core"
+      ],
+      "equipment": [
+        "floor"
+      ],
+      "tags": [
+        "warm-up",
+        "core"
+      ]
+    },
+    {
+      "key": "lateral-steps",
+      "name": "Шаги в стороны",
+      "description": "Лёгкая активация ног перед тренировкой.",
+      "instructions": "Слегка согните колени и выполняйте контролируемые шаги вправо и влево.",
+      "common_mistakes": "Сведение коленей внутрь и скрещивание стоп.",
+      "coach_tips": "Сохраняйте устойчивую стойку.",
+      "difficulty": "beginner",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "glutes",
+        "quadriceps"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "squat"
+      ]
+    },
+    {
+      "key": "low-lateral-hops",
+      "name": "Низкие боковые прыжки",
+      "description": "Мягкая динамическая подготовка стоп и ног.",
+      "instructions": "Выполняйте небольшие прыжки из стороны в сторону с мягким приземлением.",
+      "common_mistakes": "Высокие прыжки и жёсткое приземление.",
+      "coach_tips": "Начните с узкой амплитуды или замените прыжок шагом.",
+      "difficulty": "intermediate",
+      "movement_type": "duration",
+      "muscle_groups": [
+        "calves",
+        "quadriceps",
+        "glutes"
+      ],
+      "equipment": [
+        "none"
+      ],
+      "tags": [
+        "warm-up",
+        "ankle"
+      ]
+    },
+    {
+      "key": "scapular-dips",
+      "name": "Скапулярные движения в упоре на брусьях",
+      "description": "Специальная активация плечевого пояса перед работой на брусьях.",
+      "instructions": "В устойчивом упоре опустите корпус между плечами и вытолкните его вверх без сгибания локтей.",
+      "common_mistakes": "Сгибание локтей и провал плеч вперёд.",
+      "coach_tips": "Начните с малой амплитуды и активных прямых рук.",
+      "difficulty": "intermediate",
+      "movement_type": "reps",
+      "muscle_groups": [
+        "shoulders",
+        "triceps",
+        "chest"
+      ],
+      "equipment": [
+        "parallel-bars"
+      ],
+      "tags": [
+        "warm-up",
+        "push",
+        "shoulder"
+      ]
     }
   ]
 }

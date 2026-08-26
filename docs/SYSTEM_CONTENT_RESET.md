@@ -48,30 +48,30 @@ Current hard enums and recommended vocabulary are in `EXERCISE_ENUMS.json`. Migr
 The input format has no UUIDs. `key` is a stable lowercase kebab-case identity persisted in `exercises.standard_key`; it also maps to `slug`. Migration `000013_standard_exercise_key` adds the nullable, unique, system-owned-only key. Existing system rows with the same slug can be safely adopted. A coach-owned slug collision blocks the whole import.
 
 ```sh
-go run ./cmd/standard-exercises --validate-only --file ../docs/standard-exercises-200.json
+go run ./cmd/standard-exercises --validate-only --file ../docs/standard-exercises-247.json
 ```
 
 Dry-run requires a migrated PostgreSQL database and prints created, updated, unchanged and conflict counts without writing:
 
 ```sh
-go run ./cmd/standard-exercises --file ../docs/standard-exercises-200.json --dry-run
+go run ./cmd/standard-exercises --file ../docs/standard-exercises-247.json --dry-run
 ```
 
 Local confirmed import (explicit write flag required):
 
 ```sh
-DATABASE_URL='<local-database-url>' go run ./cmd/standard-exercises --file ../docs/standard-exercises-200.json --confirm
+DATABASE_URL='<local-database-url>' go run ./cmd/standard-exercises --file ../docs/standard-exercises-247.json --confirm
 ```
 
 Production command, documented only—take a backup, apply migrations and inspect dry-run first; do not put this in deployment automation:
 
 ```sh
-DATABASE_URL='<production-url>' go run ./cmd/standard-exercises --file ../docs/standard-exercises-200.json --confirm
+DATABASE_URL='<production-url>' go run ./cmd/standard-exercises --file ../docs/standard-exercises-247.json --confirm
 ```
 
-Validation rejects unknown JSON fields, empty catalogs, duplicate keys/slugs, invalid vocabulary, missing instructional fields, empty/duplicate arrays, and non-HTTPS media URLs. The release catalog is separately audited for exactly 200 records. Import is one transaction, never deletes records, and only creates/updates `owner_user_id IS NULL` rows. Recovery is database restore from the pre-import backup. For migration-only rollback, first ensure no imported `standard_key` values are needed, then run migration 000013 down; this removes only the identity column/index, not exercise rows.
+Validation rejects unknown JSON fields, empty catalogs, duplicate keys/slugs, invalid vocabulary, missing instructional fields, empty/duplicate arrays, and non-HTTPS media URLs. The current release catalog contains 247 records: the original 200 plus 47 atomic warm-up and mobility exercises. Import is one transaction, never deletes records, and only creates/updates `owner_user_id IS NULL` rows. Recovery is database restore from the pre-import backup. For migration-only rollback, first ensure no imported `standard_key` values are needed, then run migration 000013 down; this removes only the identity column/index, not exercise rows.
 
-For generation of 200 exercises, provide an AI exactly these files:
+For future catalog expansion, provide an AI exactly these files:
 
 1. `docs/standard-exercises.schema.json`
 2. `docs/EXERCISE_ENUMS.json`
