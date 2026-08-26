@@ -70,14 +70,24 @@ type Item struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 type Option struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Status      string  `json:"status,omitempty"`
-	Difficulty  string  `json:"difficulty,omitempty"`
-	Minutes     int     `json:"minutes,omitempty"`
-	SortOrder   int     `json:"sort_order,omitempty"`
-	OwnerUserID *string `json:"owner_user_id,omitempty"`
-	ParentID    *string `json:"parent_id,omitempty"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Status         string   `json:"status,omitempty"`
+	Difficulty     string   `json:"difficulty,omitempty"`
+	Minutes        int      `json:"minutes,omitempty"`
+	SortOrder      int      `json:"sort_order,omitempty"`
+	OwnerUserID    *string  `json:"owner_user_id,omitempty"`
+	ParentID       *string  `json:"parent_id,omitempty"`
+	Description    string   `json:"description,omitempty"`
+	Instructions   string   `json:"instructions,omitempty"`
+	CommonMistakes string   `json:"common_mistakes,omitempty"`
+	CoachTips      string   `json:"coach_tips,omitempty"`
+	MovementType   string   `json:"movement_type,omitempty"`
+	MuscleGroups   []string `json:"muscle_groups,omitempty"`
+	Equipment      []string `json:"equipment,omitempty"`
+	Tags           []string `json:"tags,omitempty"`
+	HasDemo        bool     `json:"has_demo,omitempty"`
+	ExerciseCount  int      `json:"exercise_count,omitempty"`
 }
 type Options struct {
 	Categories    []Option `json:"categories"`
@@ -385,6 +395,25 @@ func (s *Service) Options(ctx context.Context, user string, role Role) (Options,
 		}
 		rows.Close()
 	}
+	rows, e := s.pool.Query(ctx, `SELECT id::text,name,status,difficulty,owner_user_id::text,description,instructions,common_mistakes,coach_tips,movement_type,muscle_groups,equipment,tags,demo_media_id IS NOT NULL FROM exercises WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, role.CanManageAll(), user)
+	if e != nil {
+		return out, e
+	}
+	out.Exercises = nil
+	for rows.Next() {
+		var x Option
+		if e = rows.Scan(&x.ID, &x.Name, &x.Status, &x.Difficulty, &x.OwnerUserID, &x.Description, &x.Instructions, &x.CommonMistakes, &x.CoachTips, &x.MovementType, &x.MuscleGroups, &x.Equipment, &x.Tags, &x.HasDemo); e != nil {
+			rows.Close()
+			return out, e
+		}
+		out.Exercises = append(out.Exercises, x)
+	}
+	rows.Close()
+	for index := range out.Warmups {
+		if e = s.pool.QueryRow(ctx, `SELECT count(*) FROM workout_exercises WHERE workout_id=$1::uuid`, out.Warmups[index].ID).Scan(&out.Warmups[index].ExerciseCount); e != nil {
+			return out, e
+		}
+	}
 	return out, nil
 }
 
@@ -494,11 +523,11 @@ func validExercises(items []BuilderExercise) bool {
 	return true
 }
 
-func validateWorkoutInput(in BuilderInput) error {
-	if strings.TrimSpace(in.Title) == "" {
+func validateWorkoutInput(in BuilderInput, publish bool) error {
+	if publish && strings.TrimSpace(in.Title) == "" {
 		return invalid("Укажите название тренировки.")
 	}
-	if strings.TrimSpace(in.Description) == "" {
+	if publish && strings.TrimSpace(in.Description) == "" {
 		return invalid("Укажите описание тренировки.")
 	}
 	if in.EstimatedMinutes < 1 {
@@ -583,11 +612,11 @@ func validBuilderEnums(kind string, in BuilderInput) bool {
 
 func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role, id *string, in BuilderInput) (string, error) {
 	if kind == "workouts" {
-		if err := validateWorkoutInput(in); err != nil {
+		if err := validateWorkoutInput(in, false); err != nil {
 			return "", err
 		}
 	}
-	if strings.TrimSpace(in.Description) == "" || !validBuilderEnums(kind, in) || !validOptionalID(in.CoverMediaID) || !validOptionalID(in.DemoMediaID) {
+	if (kind != "workouts" && strings.TrimSpace(in.Description) == "") || !validBuilderEnums(kind, in) || !validOptionalID(in.CoverMediaID) || !validOptionalID(in.DemoMediaID) {
 		return "", ErrInvalid
 	}
 	if kind == "exercises" && in.DemoMediaID != nil {
@@ -803,6 +832,10 @@ func (s *Service) validatePublish(ctx context.Context, kind, id string) error {
 			return invalid("Заполните название, описание, инструкцию и группы мышц упражнения.")
 		}
 	case "workouts":
+		e := s.pool.QueryRow(ctx, `SELECT title<>'' AND description<>'' AND estimated_minutes>0 AND category IN ('warmup','morning','strength','skill') FROM workouts WHERE id=$1::uuid`, id).Scan(&valid)
+		if e != nil || !valid {
+			return invalid("Заполните название, описание, категорию и длительность тренировки.")
+		}
 		rows, e := s.pool.Query(ctx, `SELECT e.name FROM workout_exercises we JOIN exercises e ON e.id=we.exercise_id WHERE we.workout_id=$1::uuid AND e.status<>'published' ORDER BY we.sort_order`, id)
 		if e != nil {
 			return e

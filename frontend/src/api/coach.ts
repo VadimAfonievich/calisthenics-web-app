@@ -112,6 +112,16 @@ export type Option = {
   sort_order?: number;
   owner_user_id?: string;
   parent_id?: string;
+  description?: string;
+  instructions?: string;
+  common_mistakes?: string;
+  coach_tips?: string;
+  movement_type?: string;
+  muscle_groups?: string[];
+  equipment?: string[];
+  tags?: string[];
+  has_demo?: boolean;
+  exercise_count?: number;
 };
 export type CoachOptions = {
   categories: Option[];

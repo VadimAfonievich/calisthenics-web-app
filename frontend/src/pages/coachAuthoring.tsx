@@ -24,6 +24,7 @@ import {
   type ProgramWorkout,
 } from "../api/coach";
 import { useSessionStore } from "../store/session";
+import { WorkoutBuilderFields } from "./WorkoutBuilderFields";
 import "../authoringActions.css";
 export const kinds: {
   key: ContentKind;
@@ -914,8 +915,8 @@ export function validateBuilder(
   value: BuilderInput,
   publish = false,
 ) {
-  if (!(value.name ?? value.title)?.trim()) return "Введите название.";
-  if (!value.description.trim()) return "Добавьте описание.";
+  if ((kind !== "workouts" || publish) && !(value.name ?? value.title)?.trim()) return "Введите название.";
+  if ((kind !== "workouts" || publish) && !value.description.trim()) return "Добавьте описание.";
   if (kind === "exercises") {
     if (!value.instructions?.trim()) return "Добавьте инструкцию выполнения.";
     if (!value.muscle_groups?.some((x) => x.trim()))
@@ -969,6 +970,25 @@ export function validateBuilder(
   }
   return "";
 }
+export function workoutValidationErrors(value: BuilderInput, publish: boolean, options: {id:string;name:string}[] = []) {
+  const errors:string[]=[];
+  if (publish && !value.title?.trim()) errors.push("Укажите название.");
+  if (publish && !value.description.trim()) errors.push("Добавьте описание.");
+  if (!value.estimated_minutes || value.estimated_minutes < 1) errors.push("Укажите ориентировочную длительность.");
+  const items=value.exercises??[], names=new Map(options.map(x=>[x.id,x.name]));
+  if (publish && !items.length) errors.push("Добавьте хотя бы одно упражнение.");
+  const used=new Set<string>();
+  items.forEach((item,index)=>{
+    const name=names.get(item.exercise_id)??`Упражнение ${index+1}`;
+    if(used.has(item.exercise_id))errors.push(`${name}: упражнение уже добавлено.`);used.add(item.exercise_id);
+    if(!Number.isFinite(item.sets)||item.sets<1)errors.push(`${name}: количество подходов должно быть больше 0.`);
+    if((item.target_reps==null)===(item.target_duration_seconds==null))errors.push(`${name}: выберите повторения или время выполнения.`);
+    if(item.target_reps!=null&&(!Number.isFinite(item.target_reps)||item.target_reps<1))errors.push(`${name}: количество повторений должно быть больше 0.`);
+    if(item.target_duration_seconds!=null&&(!Number.isFinite(item.target_duration_seconds)||item.target_duration_seconds<1))errors.push(`${name}: время выполнения должно быть больше 0.`);
+    if(!Number.isFinite(item.rest_seconds)||item.rest_seconds<0)errors.push(`${name}: отдых не может быть отрицательным.`);
+  });
+  return errors;
+}
 function BuilderEditor({
   kind,
   id,
@@ -983,7 +1003,8 @@ function BuilderEditor({
     [value, setValue] = useState(() => blankBuilder(kind)),
     [dirty, setDirty] = useState(false),
     [success, setSuccess] = useState(false),
-    [validation, setValidation] = useState("");
+    [validation, setValidation] = useState(""),
+    [workoutErrors, setWorkoutErrors] = useState<string[]>([]);
   useDirty(dirty);
   const opts = useQuery({
       queryKey: ["coach-options"],
@@ -1065,6 +1086,7 @@ function BuilderEditor({
       setValue(x);
       setDirty(true);
       setValidation("");
+      setWorkoutErrors([]);
     },
     save = useMutation({
       mutationFn: async (publish: boolean) => {
@@ -1085,6 +1107,10 @@ function BuilderEditor({
     }),
     title = kinds.find((x) => x.key === kind)!;
   const submit = (publish = false) => {
+    if(kind==="workouts"){
+      const errors=workoutValidationErrors(value,publish,opts.data?.exercises);
+      if(errors.length){setWorkoutErrors(errors);setTimeout(()=>document.querySelector(".validation-summary")?.scrollIntoView({behavior:"smooth",block:"center"}),0);return;}
+    }
     const error = validateBuilder(kind, value, publish);
     if (error) return setValidation(error);
     save.mutate(publish);
@@ -1462,6 +1488,7 @@ function BuilderEditor({
         </>
       )}
       {validation && <p className="notice error">{validation}</p>}
+      {!!workoutErrors.length&&<div className="notice error validation-summary" role="alert"><b>Нужно исправить {workoutErrors.length} {workoutErrors.length===1?"поле":"поля"}</b><ul>{workoutErrors.map((error,index)=><li key={index}>{error}</li>)}</ul></div>}
       {success && <p className="notice success">Материал сохранён.</p>}
       {save.isError && <ErrorBox error={save.error} />}
       {!readOnly && (
@@ -1486,7 +1513,8 @@ function BuilderEditor({
     </form>
   );
 }
-export function WorkoutFields({
+export const WorkoutFields = WorkoutBuilderFields;
+function LegacyWorkoutFields({
   value,
   change,
   opts,

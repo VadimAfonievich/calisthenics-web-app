@@ -1,7 +1,7 @@
 import { api } from './client'
 import { requireEntityID } from './entityIds'
 
-export type WorkoutExercise={id:string;name:string;sets:number;target_reps?:number;target_duration_seconds?:number;rest_seconds:number;demo_media_url?:string;demo_media_type?:"video"|"image";demo_media_mime_type?:string;demo_poster_url?:string}
+export type WorkoutExercise={id:string;name:string;sets:number;target_reps?:number;target_duration_seconds?:number;rest_seconds:number;notes?:string;demo_media_url?:string;demo_media_type?:"video"|"image";demo_media_mime_type?:string;demo_poster_url?:string}
 export type WarmupSummary={id:string;title:string;estimated_minutes:number}
 export type Workout={id:string;title:string;description:string;estimated_minutes:number;difficulty:string;program_id?:string;program_name?:string;category?:string;warmup_enabled?:boolean;warmup_workout_id?:string;default_warmup?:WarmupSummary;cover_media_url?:string;exercises:WorkoutExercise[]}
 export type WorkoutCatalogItem={id:string;title:string;description:string;estimated_minutes:number;difficulty:string;exercise_count:number;program_id?:string;program_name?:string;category:string;warmup_enabled:boolean;status?:string;active_session_id?:string}

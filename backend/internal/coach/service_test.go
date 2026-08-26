@@ -72,7 +72,7 @@ func TestWorkoutCategoriesMatchPublicTaxonomy(t *testing.T) {
 
 func TestWorkoutValidationReturnsSafeFieldInformation(t *testing.T) {
 	in := BuilderInput{Title: "Сила", Description: "План", Difficulty: "beginner", Category: "strength", EstimatedMinutes: 30, DayNumber: 1, ProgramID: "10000000-0000-0000-0000-000000000001", Exercises: []BuilderExercise{{ExerciseID: "10000000-0000-0000-0000-000000000002", Sets: 3, RestSeconds: 60}}}
-	err := validateWorkoutInput(in)
+	err := validateWorkoutInput(in, true)
 	var validation *ValidationError
 	if !errors.As(err, &validation) || !strings.Contains(validation.Message, "повторения или длительность") {
 		t.Fatalf("expected safe exercise field error, got %v", err)
@@ -98,8 +98,26 @@ func TestWorkoutListUsesStandaloneDifficulty(t *testing.T) {
 func TestStandaloneWorkoutValidation(t *testing.T) {
 	reps := 10
 	in := BuilderInput{Title: "Standalone", Description: "Plan", Difficulty: "beginner", Category: "strength", EstimatedMinutes: 20, Exercises: []BuilderExercise{{ExerciseID: "10000000-0000-0000-0000-000000000002", Sets: 3, TargetReps: &reps, RestSeconds: 60, SortOrder: 0}}}
-	if err := validateWorkoutInput(in); err != nil {
+	if err := validateWorkoutInput(in, false); err != nil {
 		t.Fatalf("standalone workout rejected: %v", err)
+	}
+}
+
+func TestWorkoutDraftMayOmitPublishOnlyFields(t *testing.T) {
+	in := BuilderInput{Difficulty: "beginner", Category: "strength", EstimatedMinutes: 20}
+	if err := validateWorkoutInput(in, false); err != nil {
+		t.Fatalf("incomplete draft rejected: %v", err)
+	}
+	if err := validateWorkoutInput(in, true); err == nil {
+		t.Fatal("publish must require title and description")
+	}
+}
+
+func TestRichExerciseOptionContract(t *testing.T) {
+	owner := "10000000-0000-0000-0000-000000000099"
+	data, err := json.Marshal(Option{ID: "x", Name: "Планка", OwnerUserID: &owner, Description: "Корпус ровный", Instructions: "Удерживайте", CommonMistakes: "Прогиб", CoachTips: "Дышите", MovementType: "duration", MuscleGroups: []string{"core"}, Equipment: []string{"floor"}, Tags: []string{"core"}, HasDemo: true})
+	if err != nil || !strings.Contains(string(data), `"instructions":"Удерживайте"`) || !strings.Contains(string(data), `"has_demo":true`) {
+		t.Fatalf("picker option lost rich fields: %s %v", data, err)
 	}
 }
 
