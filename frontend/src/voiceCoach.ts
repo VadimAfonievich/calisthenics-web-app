@@ -32,8 +32,15 @@ export class VoiceCoach {
     } catch { return false; }
   }
   countdown(scope:string,remaining:number) { if (remaining>=1&&remaining<=5) return this.speak(words[remaining],`${scope}:${remaining}`,"high"); return false; }
+  preparationCountdown(scope:string,remaining:number,firstExercise?:string) {
+    if (remaining===5) {
+      const prefix=firstExercise?`Первое упражнение: ${firstExercise}. `:"";
+      return this.speak(`${prefix}Приготовьтесь. Пять.`,`${scope}:ready:5`,"high");
+    }
+    return this.countdown(scope,remaining);
+  }
   restCountdown(remaining:number) { if (remaining===5) this.speak("Приготовьтесь.","rest-ready"); if (remaining===0) return this.speak("Начали.","rest-start"); return this.countdown("rest",remaining); }
-  announceRest(seconds:number) { return this.speak(`Отдых ${seconds} секунд.`,`rest:${seconds}:${Date.now()}`); }
+  announceRest(seconds:number,nextExercise?:string) { return this.speak(nextExercise?`Отдых, следующее упражнение: ${nextExercise}.`:`Отдых ${seconds} секунд.`,`rest:${seconds}:${nextExercise??"same"}:${Date.now()}`); }
   announceStart() { return this.speak("Начали.",`start:${Date.now()}`,"high"); }
   announceSetComplete() { return this.speak("Подход завершён.",`set-complete:${Date.now()}`,"high"); }
   announceNextExercise(name:string) { return this.speak(`Следующее упражнение: ${name}.`,`next:${name}:${Date.now()}`); }

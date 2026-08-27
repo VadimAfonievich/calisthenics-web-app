@@ -363,7 +363,10 @@ export function WorkoutPlayerPage() {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
       setRemaining(5); setPhase("prepare");
     }
-    if (phase === "prepare" && remaining>0 && remaining<=5) voice.current.countdown("prepare",remaining);
+    if (phase === "prepare" && remaining>0 && remaining<=5) {
+      const firstExercise=completedCount(dataSets)===0&&current?.setNumber===1?current.exercise.name:undefined;
+      voice.current.preparationCountdown(`prepare:${current?.exercise.id}:${current?.setNumber}`,remaining,firstExercise);
+    }
     if (phase === "prepare" && remaining===0 && current) {
       if(current.exercise.target_duration_seconds!==undefined){
         voice.current.announceStart(); const seconds=current.exercise.target_duration_seconds; timerStarted.current=Date.now(); phaseDeadline.current=Date.now()+seconds*1000; setRemaining(seconds); setPhase("timer");
@@ -409,8 +412,8 @@ export function WorkoutPlayerPage() {
       if (final) setPhase("done");
       else if (current!.exercise.rest_seconds > 0) {
         const upcoming=nextSet(query.data!.workout,updated);
-        if (upcoming && upcoming.exercise.id!==current!.exercise.id) voice.current.announceNextExercise(upcoming.exercise.name);
-        voice.current.announceRest(current!.exercise.rest_seconds);
+        const nextExercise=upcoming?.exercise.id!==current!.exercise.id?upcoming?.exercise.name:undefined;
+        voice.current.announceRest(current!.exercise.rest_seconds,nextExercise);
         setRest(current!.exercise.rest_seconds);
         setRemaining(current!.exercise.rest_seconds);
         phaseDeadline.current=Date.now()+current!.exercise.rest_seconds*1000;
