@@ -19,6 +19,17 @@ export type Program = {
   cover_media_url?: string;
   workout_count: number;
   workouts?: ProgramWorkout[];
+  levels?: ProgramLevel[];
+};
+export type ProgramLevel = {
+  id: string;
+  level_number: number;
+  title: string;
+  description: string;
+  difficulty: string;
+  unlock_rule_type: string;
+  unlock_rule_value: number;
+  workouts: ProgramWorkout[];
 };
 export const listPrograms = (token: string) =>
   api<{ programs: Program[] }>("/programs", {}, token);

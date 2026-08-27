@@ -456,7 +456,7 @@ export const builderPayload = (
       name: value.name,
       duration_weeks: value.duration_weeks,
       category: value.category,
-      workouts: value.workouts,
+      levels: value.levels,
     };
   return {
     ...common,
@@ -883,7 +883,23 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
       }
     : {}),
   ...(kind === "programs"
-    ? { name: "", duration_weeks: 4, category: "OTHER", workouts: [] }
+    ? {
+        name: "",
+        duration_weeks: 4,
+        category: "OTHER",
+        levels: [{
+          level_number: 1,
+          title: "Первый этап",
+          description: "Цель и содержание этапа",
+          difficulty: "beginner",
+          unlock_rule_type: "none",
+          unlock_rule_value: 0,
+          criterion_type: "workout_completed",
+          criterion_value: 1,
+          sort_order: 0,
+          workouts: [],
+        }],
+      }
     : {}),
   ...(kind === "skills"
     ? {
@@ -954,8 +970,19 @@ export function validateBuilder(
     (!value.duration_weeks || value.duration_weeks < 1)
   )
     return "Укажите продолжительность программы.";
-  if (kind === "programs" && publish && !value.workouts?.length)
-    return "Добавьте хотя бы одну тренировку.";
+  if (
+    kind === "programs" &&
+    value.levels?.some(
+      (level) => !level.title.trim() || !level.description.trim(),
+    )
+  )
+    return "Заполните название и описание каждого этапа программы.";
+  if (
+    kind === "programs" &&
+    publish &&
+    value.levels?.some((level) => !level.workouts?.length)
+  )
+    return "Добавьте хотя бы одну тренировку в каждый этап программы.";
   if (kind === "skills") {
     if (!value.icon?.trim()) return "Добавьте значок прогрессии.";
     if (!value.final_criterion_value || value.final_criterion_value < 1)
@@ -968,6 +995,14 @@ export function validateBuilder(
       )
     )
       return "Укажите значение критерия для каждого этапа.";
+    if (
+      value.levels.some(
+        (level) =>
+          level.criterion_type === "workout_completed" &&
+          !level.program_level_id,
+      )
+    )
+      return "Свяжите этапы с критерием «Завершение тренировки» с этапом программы.";
   }
   return "";
 }
@@ -1038,6 +1073,17 @@ function BuilderEditor({
                 ? { program_level_id: String(x.program_level_id) }
                 : {}),
               sort_order: Number(x.sort_order ?? 0),
+              ...(Array.isArray(x.workouts)
+                ? {
+                    workouts: x.workouts.map((workout) => {
+                      const relation = workout as Record<string, unknown>;
+                      return {
+                        workout_id: String(relation.workout_id ?? ""),
+                        sort_order: Number(relation.sort_order ?? 0),
+                      };
+                    }),
+                  }
+                : {}),
             };
           })
         : undefined;
@@ -1356,7 +1402,7 @@ function BuilderEditor({
         </>
       )}{" "}
       {kind === "programs" && (
-        <ProgramWorkouts value={value} change={change} opts={opts.data} />
+        <Stages value={value} change={change} kind="programs" opts={opts.data} />
       )}
       {kind === "skills" && (
         <>
@@ -1769,26 +1815,44 @@ function ProgramWorkouts({
   value,
   change,
   opts,
+  levelIndex,
 }: {
   value: BuilderInput;
   change: (x: BuilderInput) => void;
   opts?: Awaited<ReturnType<typeof coachOptions>>;
+  levelIndex: number;
 }) {
   const [selecting, setSelecting] = useState(false),
     [search, setSearch] = useState("");
-  const selected = value.workouts ?? [];
+  const levels = value.levels ?? [],
+    selected = levels[levelIndex]?.workouts ?? [],
+    selectedElsewhere = new Set(
+      levels.flatMap((level, index) =>
+        index === levelIndex
+          ? []
+          : (level.workouts ?? []).map((item) => item.workout_id),
+      ),
+    );
   const byID = new Map(opts?.workouts.map((x) => [x.id, x]) ?? []);
   const available = (opts?.workouts ?? []).filter(
     (x) =>
       x.owner_user_id &&
       !selected.some((item) => item.workout_id === x.id) &&
+      !selectedElsewhere.has(x.id) &&
       x.name.toLowerCase().includes(search.toLowerCase()),
   );
   const replace = (items: ProgramWorkout[]) =>
-    change({ ...value, workouts: normalizeProgramWorkouts(items) });
+    change({
+      ...value,
+      levels: levels.map((level, index) =>
+        index === levelIndex
+          ? { ...level, workouts: normalizeProgramWorkouts(items) }
+          : level,
+      ),
+    });
   return (
     <section className="stack program-workouts">
-      <h3>Тренировки</h3>
+      <h4>Тренировки этапа</h4>
       {selected.map((item, index) => {
         const workout = byID.get(item.workout_id);
         return (
@@ -1882,7 +1946,7 @@ function ProgramWorkouts({
     </section>
   );
 }
-function Stages({
+export function Stages({
   value,
   change,
   kind,
@@ -1896,7 +1960,13 @@ function Stages({
   const levels = value.levels ?? [];
   return (
     <>
-      <h3>Этапы прогрессии</h3>
+      <h3>{kind === "programs" ? "Этапы программы" : "Этапы прогрессии"}</h3>
+      {kind === "programs" && (
+        <p className="notice">
+          Разделите путь ученика на этапы и добавьте свои тренировки в каждый
+          этап. Этапы навыка затем можно связать с этими разделами программы.
+        </p>
+      )}
       {levels.map((x, i) => (
         <div className="card stage-editor" key={i}>
           <label>
@@ -1929,6 +1999,24 @@ function Stages({
           </label>
           {kind === "programs" ? (
             <>
+              <label>
+                Сложность этапа
+                <select
+                  value={x.difficulty}
+                  onChange={(e) =>
+                    change({
+                      ...value,
+                      levels: levels.map((v, j) =>
+                        j === i ? { ...v, difficulty: e.target.value } : v,
+                      ),
+                    })
+                  }
+                >
+                  <option value="beginner">Начальный</option>
+                  <option value="intermediate">Средний</option>
+                  <option value="advanced">Продвинутый</option>
+                </select>
+              </label>
               <label>
                 Условие открытия
                 <select
@@ -1975,6 +2063,12 @@ function Stages({
                   }
                 />
               </label>
+              <ProgramWorkouts
+                value={value}
+                change={change}
+                opts={opts}
+                levelIndex={i}
+              />
             </>
           ) : (
             <>
@@ -2003,6 +2097,10 @@ function Stages({
                     </option>
                   ))}
                 </select>
+                <small>
+                  Здесь показаны этапы сохранённых программ в формате
+                  «Программа · Этап».
+                </small>
               </label>
               <label>
                 Критерий этапа
@@ -2054,8 +2152,18 @@ function Stages({
           )}
           <button
             type="button"
+            disabled={levels.length === 1}
             onClick={() =>
-              change({ ...value, levels: levels.filter((_, j) => j !== i) })
+              change({
+                ...value,
+                levels: levels
+                  .filter((_, j) => j !== i)
+                  .map((level, index) => ({
+                    ...level,
+                    unlock_rule_type:
+                      index === 0 ? "none" : level.unlock_rule_type,
+                  })),
+              })
             }
           >
             Удалить
@@ -2071,16 +2179,23 @@ function Stages({
             levels: [
               ...levels,
               {
-                level_number: levels.length + 1,
+                level_number:
+                  Math.max(0, ...levels.map((level) => level.level_number)) + 1,
                 title: `Этап ${levels.length + 1}`,
                 description: "Описание этапа",
                 difficulty: value.difficulty,
-                unlock_rule_type: "none",
-                unlock_rule_value: 0,
+                unlock_rule_type:
+                  kind === "programs" && levels.length
+                    ? "previous_level"
+                    : "none",
+                unlock_rule_value:
+                  kind === "programs" && levels.length ? 1 : 0,
                 criterion_type:
                   kind === "skills" ? "repetitions" : "workout_completed",
                 criterion_value: 1,
-                sort_order: levels.length,
+                sort_order:
+                  Math.max(-1, ...levels.map((level) => level.sort_order)) + 1,
+                workouts: kind === "programs" ? [] : undefined,
               },
             ],
           })

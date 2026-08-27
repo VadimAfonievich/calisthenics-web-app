@@ -50,6 +50,18 @@ export function ProgramDetailPage() {
   if (q.isError || !q.data)
     return <p className="notice error">Программа не найдена.</p>;
   const p = q.data.program;
+  const levels = p.levels?.length
+    ? p.levels
+    : [{
+        id: "legacy",
+        level_number: 1,
+        title: "Тренировки",
+        description: "Тренировки программы",
+        difficulty: p.difficulty,
+        unlock_rule_type: "none",
+        unlock_rule_value: 0,
+        workouts: p.workouts ?? [],
+      }];
   return (
     <div className="stack">
       <Link className="text-link" to="/programs">
@@ -61,18 +73,25 @@ export function ProgramDetailPage() {
         <span>{p.description}</span>
         <b>{p.workout_count} тренировок</b>
       </section>
-      <h3>Тренировки программы</h3>
-      {p.workouts?.map((w, i) => (
-        <Link className="workout-card" to={`/workouts/${w.id}`} key={w.id}>
-          <p className="eyebrow">
-            {i + 1}. {difficulty[w.difficulty] ?? w.difficulty}
-          </p>
-          <h3>{w.title}</h3>
-          <p>{w.description}</p>
-          <footer>
-            <span>{w.estimated_minutes} мин</span>
-          </footer>
-        </Link>
+      <h3>Этапы программы</h3>
+      {levels.map((level, levelIndex) => (
+        <section className="stack card" key={level.id}>
+          <header>
+            <p className="eyebrow">ЭТАП {levelIndex + 1}</p>
+            <h3>{level.title}</h3>
+            <p>{level.description}</p>
+          </header>
+          {level.workouts.map((w, workoutIndex) => (
+            <Link className="workout-card" to={`/workouts/${w.id}`} key={w.id}>
+              <p className="eyebrow">
+                {workoutIndex + 1}. {difficulty[w.difficulty] ?? w.difficulty}
+              </p>
+              <h3>{w.title}</h3>
+              <p>{w.description}</p>
+              <footer><span>{w.estimated_minutes} мин</span></footer>
+            </Link>
+          ))}
+        </section>
       ))}
     </div>
   );

@@ -67,6 +67,7 @@ export type BuilderLevel = {
   criterion_value: number;
   program_level_id?: string;
   sort_order: number;
+  workouts?: ProgramWorkout[];
 };
 export type BuilderInput = {
   name?: string;

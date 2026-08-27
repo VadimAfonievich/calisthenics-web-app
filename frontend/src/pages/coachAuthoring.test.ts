@@ -69,6 +69,23 @@ describe("program workout ordering", () => {
     ]);
   });
 });
+describe("program stages", () => {
+  const workout = { workout_id: "10000000-0000-0000-0000-000000000001", sort_order: 0 };
+  const program = {
+    name: "Путь к горизонту",
+    description: "Пошаговая программа",
+    difficulty: "beginner",
+    duration_weeks: 8,
+    category: "SKILL",
+    levels: [{ level_number: 1, title: "База", description: "Подготовка", difficulty: "beginner", unlock_rule_type: "none", unlock_rule_value: 0, criterion_type: "workout_completed", criterion_value: 1, sort_order: 0, workouts: [workout] }],
+  };
+  it("sends nested program levels instead of flattening workouts", () => {
+    expect(builderPayload("programs", program).levels?.[0].workouts).toEqual([workout]);
+  });
+  it("requires a workout in every stage before publishing", () => {
+    expect(validateBuilder("programs", {...program, levels: [{...program.levels[0], workouts: []}]}, true)).toContain("каждый этап");
+  });
+});
 describe("workout targets", () => {
   it("uses exactly one of repetitions or duration", () => {
     expect(workoutTarget("reps")).toEqual({

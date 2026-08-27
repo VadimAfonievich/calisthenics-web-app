@@ -140,3 +140,27 @@ func TestProgramWorkoutRelationsValidateIDsOrderAndDuplicates(t *testing.T) {
 		t.Fatal("duplicate workout accepted")
 	}
 }
+
+func TestProgramLevelsKeepWorkoutsSeparated(t *testing.T) {
+	a := "10000000-0000-0000-0000-000000000001"
+	b := "10000000-0000-0000-0000-000000000002"
+	levels := []BuilderLevel{
+		{LevelNumber: 1, Title: "База", Description: "Подготовка", Difficulty: "beginner", UnlockRuleType: "none", SortOrder: 0, Workouts: []ProgramWorkout{{WorkoutID: a, SortOrder: 0}}},
+		{LevelNumber: 2, Title: "Горизонт", Description: "Основной этап", Difficulty: "intermediate", UnlockRuleType: "previous_level", UnlockRuleValue: 1, SortOrder: 1, Workouts: []ProgramWorkout{{WorkoutID: b, SortOrder: 0}}},
+	}
+	if !validProgramLevels(levels) {
+		t.Fatal("valid multi-level program rejected")
+	}
+	levels[1].Workouts[0].WorkoutID = a
+	if validProgramLevels(levels) {
+		t.Fatal("one workout cannot belong to two program levels")
+	}
+}
+
+func TestLegacyProgramWorkoutsBecomeOneLevel(t *testing.T) {
+	id := "10000000-0000-0000-0000-000000000001"
+	levels := normalizedProgramLevels(BuilderInput{Difficulty: "beginner", Workouts: []ProgramWorkout{{WorkoutID: id, SortOrder: 0}}})
+	if len(levels) != 1 || levels[0].Title != "Тренировки" || len(levels[0].Workouts) != 1 {
+		t.Fatalf("legacy program relation was not preserved: %#v", levels)
+	}
+}
