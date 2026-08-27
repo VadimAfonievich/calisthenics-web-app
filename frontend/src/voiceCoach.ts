@@ -1,5 +1,5 @@
 import type {WorkoutExercise} from './api/workouts'
-import {completionPhrase,countdownWords,finishedPhrase,nextExercisePhrase,preparationPhrase,sameExerciseRestPhrase,sessionIntroPhrase,startedPhrase,voiceTestPhrase} from './voiceCoachPhrases'
+import {completionPhrase,countdownWords,finishedPhrase,nextExercisePhrase,preparationPhrase,restPhrase,sessionIntroPhrase,startedPhrase,voiceTestPhrase} from './voiceCoachPhrases'
 
 export const VOICE_COACH_KEY = "calisthenics_voice_coach_enabled";
 export const VOICE_COACH_VOICE_KEY = "calisthenics_voice_coach_voice";
@@ -18,6 +18,7 @@ export class VoiceCoach {
   setEnabled(enabled:boolean) { this.enabled=enabled; if (!enabled) this.cancel(); }
   isSupported() { return typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined"; }
   cancel() { this.lastKey=""; if (this.isSupported()) window.speechSynthesis.cancel(); }
+  dispose() { this.cancel(); this.spokenKeys.clear(); }
   voices() { return this.isSupported()?window.speechSynthesis.getVoices().filter(v=>v.lang.toLowerCase().startsWith("ru")):[]; }
   selectedVoice() {
     const voices=this.voices(); let stored=""; try{stored=localStorage.getItem(VOICE_COACH_VOICE_KEY)??""}catch{/* optional */}
@@ -42,7 +43,7 @@ export class VoiceCoach {
     return this.countdown(scope,remaining);
   }
   announceSessionStart(category:string|undefined,exercise:WorkoutExercise,eventID:string) { return this.speak(sessionIntroPhrase(category,exercise),`session-intro:${eventID}`,"high"); }
-  announceTransition(seconds:number,next:WorkoutExercise|undefined,eventID:string) { return this.speak(next?nextExercisePhrase(next,seconds):sameExerciseRestPhrase(seconds),`transition:${eventID}`,"normal"); }
+  announceTransition(_seconds:number,next:WorkoutExercise|undefined,eventID:string) { return this.speak(next?nextExercisePhrase(next):restPhrase,`transition:${eventID}`,"normal"); }
   announceStart(eventID=`start:${Date.now()}`) { return this.speak(startedPhrase,`start:${eventID}`,"high"); }
   announceFinished(eventID:string) { return this.speak(finishedPhrase,`finished:${eventID}`,"high"); }
   announceCompletion(category:string|undefined,continues:boolean,eventID:string) { return this.speak(completionPhrase(category,continues),`completion:${eventID}`); }

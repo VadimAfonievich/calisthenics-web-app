@@ -9,8 +9,8 @@ export const russianSeconds=(value:number)=>{
 export const exerciseTargetPhrase=(exercise:WorkoutExercise)=>exercise.target_reps!==undefined?`${exercise.target_reps} раз.`:`${russianSeconds(exercise.target_duration_seconds??0)}.`
 export const exerciseIntroPhrase=(exercise:WorkoutExercise)=>`${exercise.name}. ${exerciseTargetPhrase(exercise)}`
 export const sessionIntroPhrase=(category:string|undefined,exercise:WorkoutExercise)=>`${category==='warmup'?'Начинаем разминку.':'Начинаем тренировку.'} ${exerciseIntroPhrase(exercise)}`
-export const nextExercisePhrase=(exercise:WorkoutExercise,restSeconds=0)=>`${restSeconds>0?`Отдых ${russianSeconds(restSeconds)}. `:''}Следующее упражнение — ${exercise.name}. ${exerciseTargetPhrase(exercise)}`
-export const sameExerciseRestPhrase=(seconds:number)=>`Отдых ${russianSeconds(seconds)}.`
+export const nextExercisePhrase=(exercise:WorkoutExercise)=>`Следующее упражнение — ${exercise.name}. ${exerciseTargetPhrase(exercise)}`
+export const restPhrase='Отдохните.'
 export const preparationPhrase='Приготовьтесь. Пять.'
 export const countdownWords:Record<number,string>={1:'Один',2:'Два',3:'Три',4:'Четыре',5:'Пять'}
 export const startedPhrase='Начали.'

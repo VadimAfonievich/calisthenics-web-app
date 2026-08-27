@@ -329,7 +329,7 @@ export function WorkoutPlayerPage() {
   const autoSaved = useRef("");
   const phaseDeadline=useRef(0);
   const voice=useRef(new VoiceCoach(voiceEnabled));
-  useEffect(()=>()=>voice.current.cancel(),[]);
+  useEffect(()=>()=>voice.current.dispose(),[]);
   useEffect(()=>{if(!voice.current.isSupported())return;const refresh=()=>setVoices(voice.current.voices());refresh();window.speechSynthesis.addEventListener?.("voiceschanged",refresh);return()=>window.speechSynthesis.removeEventListener?.("voiceschanged",refresh)},[]);
   useEffect(() => {
     const i = setInterval(() => setNow(Date.now()), 1000);
