@@ -304,7 +304,7 @@ export function WorkoutPreviewPage() {
   );
 }
 
-type Phase = "prepare" | "set" | "timer" | "rest" | "done" | "transition";
+type Phase = "intro" | "prepare" | "set" | "timer" | "rest" | "done" | "transition";
 export function WorkoutPlayerPage() {
   const { id = "" } = useParams(),
     token = useSessionStore((s) => s.accessToken),
@@ -318,7 +318,7 @@ export function WorkoutPlayerPage() {
     retry: false,
   });
   const [dataSets, setDataSets] = useState<CompletedSet[]>([]),
-    [phase, setPhase] = useState<Phase>("prepare"),
+    [phase, setPhase] = useState<Phase>("intro"),
     [now, setNow] = useState(Date.now()),
     [remaining, setRemaining] = useState(0),
     [rest, setRest] = useState(0),
@@ -336,7 +336,13 @@ export function WorkoutPlayerPage() {
     return () => clearInterval(i);
   }, []);
   useEffect(() => {
-    if (query.data) { setDataSets(query.data.completed_sets); if(query.data.session.status!=="completed"&&phaseDeadline.current===0){setRemaining(5);phaseDeadline.current=Date.now()+5000;setPhase("prepare");} }
+    if (query.data) {
+      setDataSets(query.data.completed_sets);
+      if(query.data.session.status!=="completed"&&phaseDeadline.current===0){
+        const first=nextSet(query.data.workout,query.data.completed_sets);
+        if(first){voice.current.announceSessionStart(query.data.workout.category,first.exercise,query.data.session.id);setRemaining(4);phaseDeadline.current=Date.now()+4000;setPhase("intro");}
+      }
+    }
   }, [query.data]);
   const current = useMemo(
     () => (query.data ? nextSet(query.data.workout, dataSets) : null),
@@ -347,8 +353,9 @@ export function WorkoutPlayerPage() {
       setActualReps(current.exercise.target_reps);
   }, [current?.exercise.id, current?.setNumber]);
   useEffect(() => {
-    if ((phase !== "timer" && phase !== "rest" && phase !== "prepare") || !phaseDeadline.current) return;
-    const next=Math.max(0,Math.ceil((phaseDeadline.current-now)/1000));
+    if ((phase !== "timer" && phase !== "rest" && phase !== "prepare" && phase !== "intro") || !phaseDeadline.current) return;
+    const calculated=Math.max(0,Math.ceil((phaseDeadline.current-now)/1000));
+    const next=phase==="intro"?Math.min(4,calculated):phase==="prepare"?Math.min(5,calculated):calculated;
     setRemaining(current=>current===next?current:next);
   }, [phase,now]);
   useEffect(() => {
@@ -357,21 +364,19 @@ export function WorkoutPlayerPage() {
         "success",
       );
     }
-    if (phase === "timer" && isPreparationTime(remaining) && timerStarted.current) voice.current.cancel();
+    if (phase === "timer" && remaining>0 && remaining<=5 && current) voice.current.countdown(`ending:${current.exercise.id}:${current.setNumber}`,remaining);
     if (phase === "rest" && isPreparationTime(remaining)) {
       voice.current.cancel();
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
       setRemaining(5); setPhase("prepare");
     }
-    if (phase === "prepare" && remaining>0 && remaining<=5) {
-      const firstExercise=completedCount(dataSets)===0&&current?.setNumber===1?current.exercise.name:undefined;
-      voice.current.preparationCountdown(`prepare:${current?.exercise.id}:${current?.setNumber}`,remaining,firstExercise);
-    }
+    if (phase === "intro" && remaining===0) {voice.current.cancel();setRemaining(5);phaseDeadline.current=Date.now()+5000;setPhase("prepare");}
+    if (phase === "prepare" && remaining>0 && remaining<=5) voice.current.preparationCountdown(`prepare:${current?.exercise.id}:${current?.setNumber}`,remaining);
     if (phase === "prepare" && remaining===0 && current) {
       if(current.exercise.target_duration_seconds!==undefined){
-        voice.current.announceStart(); const seconds=current.exercise.target_duration_seconds; timerStarted.current=Date.now(); phaseDeadline.current=Date.now()+seconds*1000; setRemaining(seconds); setPhase("timer");
+        voice.current.announceStart(`${current.exercise.id}:${current.setNumber}`); const seconds=current.exercise.target_duration_seconds; timerStarted.current=Date.now(); phaseDeadline.current=Date.now()+seconds*1000; setRemaining(seconds); setPhase("timer");
       } else {
-        voice.current.announceExercise(current.exercise.name,current.exercise.target_reps);
+        voice.current.announceStart(`${current.exercise.id}:${current.setNumber}`);
         setPhase("set");
       }
     }
@@ -386,8 +391,8 @@ export function WorkoutPlayerPage() {
       }),
     onSuccess: (_, payload) => {
       voice.current.cancel();
-      voice.current.announceSetComplete();
-      if(current!.setNumber===current!.exercise.sets) voice.current.announceExerciseComplete();
+      const completedEvent=`${id}:${current!.exercise.id}:${current!.setNumber}`;
+      voice.current.announceFinished(completedEvent);
       const item = {
         exercise_id: current!.exercise.id,
         set_number: current!.setNumber,
@@ -409,24 +414,24 @@ export function WorkoutPlayerPage() {
       autoSaved.current = "";
       const final =
         completedCount(dataSets) + 1 >= totalSets(query.data!.workout);
-      if (final) setPhase("done");
+      if (final) {voice.current.announceCompletion(query.data!.workout.category,!!query.data!.session.follow_up_workout_id,completedEvent);setPhase("done");}
       else if (current!.exercise.rest_seconds > 0) {
         const upcoming=nextSet(query.data!.workout,updated);
-        const nextExercise=upcoming?.exercise.id!==current!.exercise.id?upcoming?.exercise.name:undefined;
-        voice.current.announceRest(current!.exercise.rest_seconds,nextExercise);
+        const nextExercise=upcoming?.exercise.id!==current!.exercise.id?upcoming?.exercise:undefined;
+        voice.current.announceTransition(current!.exercise.rest_seconds,nextExercise,completedEvent);
         setRest(current!.exercise.rest_seconds);
         setRemaining(current!.exercise.rest_seconds);
         phaseDeadline.current=Date.now()+current!.exercise.rest_seconds*1000;
         setPhase("rest");
       } else {
         const upcoming=nextSet(query.data!.workout,updated);
-        if (upcoming && upcoming.exercise.id!==current!.exercise.id) voice.current.announceNextExercise(upcoming.exercise.name);
-        setRemaining(5); phaseDeadline.current=Date.now()+5000; setPhase("prepare");
+        if (upcoming && upcoming.exercise.id!==current!.exercise.id) {voice.current.announceTransition(0,upcoming.exercise,completedEvent);setRemaining(4);phaseDeadline.current=Date.now()+4000;setPhase("intro");}
+        else {setRemaining(5); phaseDeadline.current=Date.now()+5000; setPhase("prepare");}
       }
     },
   });
   useEffect(()=>{
-    if(phase!=="timer"||!isPreparationTime(remaining)||!timerStarted.current||!current||record.isPending)return;
+    if(phase!=="timer"||remaining!==0||!timerStarted.current||!current||record.isPending)return;
     const key=`${current.exercise.id}:${current.setNumber}`;
     if(autoSaved.current===key)return;
     autoSaved.current=key;
@@ -644,7 +649,7 @@ function SetView({
       <p>
         Подход {current.setNumber} из {x.sets}
       </p>
-      {phase==="prepare" ? <><span>Приготовьтесь…</span><strong className="countdown">{remaining}</strong></> : x.target_reps !== undefined ? (
+      {phase==="intro" ? <span>Слушайте следующую подсказку…</span> : phase==="prepare" ? <><span>Приготовьтесь…</span><strong className="countdown">{remaining}</strong></> : x.target_reps !== undefined ? (
         <>
           <span>Цель: {x.target_reps} повторений</span>
           <div className="rep-control">
@@ -689,20 +694,17 @@ function SetView({
   );
 }
 export function WarmupTransition({sessionID,title,onContinue}:{sessionID:string;title:string;onContinue:(sessionID:string)=>void|Promise<void>}) {
-  const [remaining,setRemaining]=useState(5),[starting,setStarting]=useState(false),[error,setError]=useState("");
-  const deadline=useRef(Date.now()+5000),transitionStarted=useRef(false);
+  const [starting,setStarting]=useState(false),[error,setError]=useState("");
+  const transitionStarted=useRef(false);
   const continueToMainWorkout=useCallback(async()=>{
     if(transitionStarted.current)return;
-    transitionStarted.current=true;deadline.current=0;setStarting(true);setError("");
+    transitionStarted.current=true;setStarting(true);setError("");
     try{await onContinue(sessionID)}catch{
       transitionStarted.current=false;setStarting(false);setError("Не удалось открыть основную тренировку.");
     }
   },[onContinue,sessionID]);
-  useEffect(()=>{
-    const update=()=>{if(!deadline.current)return;const next=Math.max(0,Math.ceil((deadline.current-Date.now())/1000));setRemaining(next);if(next===0)void continueToMainWorkout()};
-    const timer=window.setInterval(update,250);update();return()=>window.clearInterval(timer);
-  },[continueToMainWorkout]);
-  return <section className="player-focus warmup-transition"><p className="eyebrow">РАЗМИНКА ЗАВЕРШЕНА</p><h2>{title}</h2><p>{starting?"Начинаем!":`Начинаем через ${remaining}`}</p>{error&&<p className="notice error">{error}</p>}<button className="primary-button" disabled={starting} onClick={()=>void continueToMainWorkout()}>{error?"Повторить":starting?"Открываем…":"Начать сейчас"}</button></section>;
+  useEffect(()=>{void continueToMainWorkout()},[continueToMainWorkout]);
+  return <section className="player-focus warmup-transition"><p className="eyebrow">РАЗМИНКА ЗАВЕРШЕНА</p><h2>{title}</h2><p>{starting?"Открываем основную тренировку…":"Готово к переходу"}</p>{error&&<p className="notice error">{error}</p>}<button className="primary-button" disabled={starting} onClick={()=>void continueToMainWorkout()}>{error?"Повторить":"Открываем…"}</button></section>;
 }
 function RestView({
   seconds,

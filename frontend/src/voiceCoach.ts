@@ -1,6 +1,8 @@
+import type {WorkoutExercise} from './api/workouts'
+import {completionPhrase,countdownWords,finishedPhrase,nextExercisePhrase,preparationPhrase,sameExerciseRestPhrase,sessionIntroPhrase,startedPhrase,voiceTestPhrase} from './voiceCoachPhrases'
+
 export const VOICE_COACH_KEY = "calisthenics_voice_coach_enabled";
 export const VOICE_COACH_VOICE_KEY = "calisthenics_voice_coach_voice";
-const words: Record<number,string> = {1:"Один",2:"Два",3:"Три",4:"Четыре",5:"Пять"};
 
 export const voiceCoachPreference = () => {
   try { return localStorage.getItem(VOICE_COACH_KEY) !== "false"; } catch { return true; }
@@ -11,6 +13,7 @@ export const saveVoiceCoachPreference = (enabled:boolean) => {
 
 export class VoiceCoach {
   private lastKey = "";
+  private spokenKeys = new Set<string>();
   constructor(private enabled = true) {}
   setEnabled(enabled:boolean) { this.enabled=enabled; if (!enabled) this.cancel(); }
   isSupported() { return typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined"; }
@@ -22,29 +25,26 @@ export class VoiceCoach {
   }
   setVoice(identifier:string) { try{localStorage.setItem(VOICE_COACH_VOICE_KEY,identifier)}catch{/* optional */} }
   speak(text:string,key=text,priority:"normal"|"high"="normal") {
-    if (!this.enabled || !this.isSupported() || this.lastKey===key) return false;
+    if (!this.enabled || !this.isSupported() || this.lastKey===key || this.spokenKeys.has(key)) return false;
     if(priority==="high") window.speechSynthesis.cancel();
-    this.lastKey=key;
+    this.lastKey=key;this.spokenKeys.add(key);if(this.spokenKeys.size>250)this.spokenKeys.delete(this.spokenKeys.values().next().value!);
     try {
       const utterance=new SpeechSynthesisUtterance(text); utterance.lang="ru-RU";utterance.rate=1.08;utterance.pitch=.88;
       const russian=this.selectedVoice(); if (russian) utterance.voice=russian;
       window.speechSynthesis.speak(utterance); return true;
     } catch { return false; }
   }
-  countdown(scope:string,remaining:number) { if (remaining>=1&&remaining<=5) return this.speak(words[remaining],`${scope}:${remaining}`,"high"); return false; }
-  preparationCountdown(scope:string,remaining:number,firstExercise?:string) {
+  countdown(scope:string,remaining:number) { if (remaining>=1&&remaining<=5) return this.speak(countdownWords[remaining],`${scope}:${remaining}`,"high"); return false; }
+  preparationCountdown(scope:string,remaining:number) {
     if (remaining===5) {
-      const prefix=firstExercise?`Первое упражнение: ${firstExercise}. `:"";
-      return this.speak(`${prefix}Приготовьтесь. Пять.`,`${scope}:ready:5`,"high");
+      return this.speak(preparationPhrase,`${scope}:ready:5`,"high");
     }
     return this.countdown(scope,remaining);
   }
-  restCountdown(remaining:number) { if (remaining===5) this.speak("Приготовьтесь.","rest-ready"); if (remaining===0) return this.speak("Начали.","rest-start"); return this.countdown("rest",remaining); }
-  announceRest(seconds:number,nextExercise?:string) { return this.speak(nextExercise?`Отдых, следующее упражнение: ${nextExercise}.`:`Отдых ${seconds} секунд.`,`rest:${seconds}:${nextExercise??"same"}:${Date.now()}`); }
-  announceStart() { return this.speak("Начали.",`start:${Date.now()}`,"high"); }
-  announceSetComplete() { return this.speak("Подход завершён.",`set-complete:${Date.now()}`,"high"); }
-  announceNextExercise(name:string) { return this.speak(`Следующее упражнение: ${name}.`,`next:${name}:${Date.now()}`); }
-  announceExercise(name:string,reps?:number) { return this.speak(`${name}.${reps!==undefined?` ${reps} раз.`:""}`,`exercise:${name}:${reps??"time"}`); }
-  announceExerciseComplete() { return this.speak("Упражнение завершено.",`exercise-complete:${Date.now()}`); }
-  test() { return this.speak("Голосовые подсказки включены.",`test:${Date.now()}`); }
+  announceSessionStart(category:string|undefined,exercise:WorkoutExercise,eventID:string) { return this.speak(sessionIntroPhrase(category,exercise),`session-intro:${eventID}`,"high"); }
+  announceTransition(seconds:number,next:WorkoutExercise|undefined,eventID:string) { return this.speak(next?nextExercisePhrase(next,seconds):sameExerciseRestPhrase(seconds),`transition:${eventID}`,"normal"); }
+  announceStart(eventID=`start:${Date.now()}`) { return this.speak(startedPhrase,`start:${eventID}`,"high"); }
+  announceFinished(eventID:string) { return this.speak(finishedPhrase,`finished:${eventID}`,"high"); }
+  announceCompletion(category:string|undefined,continues:boolean,eventID:string) { return this.speak(completionPhrase(category,continues),`completion:${eventID}`); }
+  test() { return this.speak(voiceTestPhrase,`test:${Date.now()}`); }
 }
