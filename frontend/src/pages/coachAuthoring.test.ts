@@ -9,6 +9,7 @@ import {
   workoutTarget,
   validateBuilder,
 } from "./coachAuthoring";
+import { normalizeCoachOptions } from "../api/coach";
 describe("Coach authoring UX", () => {
   it("maps internal lesson blocks to human labels", () => {
     expect(blockNames.heading).toBe("Заголовок");
@@ -28,6 +29,23 @@ describe("Coach authoring UX", () => {
     expect(shouldLeave(true, ask)).toBe(false);
     expect(ask).toHaveBeenCalled();
     expect(shouldLeave(false, ask)).toBe(true);
+  });
+});
+describe("coach editor options", () => {
+  it("keeps the progression form renderable when empty API collections are null", () => {
+    const options = normalizeCoachOptions({
+      categories: null,
+      exercises: null,
+      programs: null,
+      program_levels: null,
+      workouts: null,
+      warmups: null,
+      skills: null,
+      media: null,
+    });
+    expect(options.program_levels).toEqual([]);
+    expect(options.skills).toEqual([]);
+    expect(options.media).toEqual([]);
   });
 });
 describe("numeric inputs", () => {

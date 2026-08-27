@@ -133,6 +133,26 @@ export type CoachOptions = {
   skills: Option[];
   media: Option[];
 };
+const coachOptionKeys: (keyof CoachOptions)[] = [
+  "categories",
+  "exercises",
+  "programs",
+  "program_levels",
+  "workouts",
+  "warmups",
+  "skills",
+  "media",
+];
+export function normalizeCoachOptions(
+  value: Partial<Record<keyof CoachOptions, Option[] | null>>,
+): CoachOptions {
+  return Object.fromEntries(
+    coachOptionKeys.map((key) => [
+      key,
+      Array.isArray(value[key]) ? value[key] : [],
+    ]),
+  ) as CoachOptions;
+}
 export type MediaAsset = {
   id: string;
   type: "image" | "video";
@@ -173,7 +193,8 @@ export const coachMe = (t: string) =>
       {},
       t,
     ),
-  coachOptions = (t: string) => api<CoachOptions>("/coach/options", {}, t),
+  coachOptions = async (t: string) =>
+    normalizeCoachOptions(await api<CoachOptions>("/coach/options", {}, t)),
   createLesson = (t: string, x: LessonInput) =>
     api<{ id: string }>(
       "/coach/lessons",
