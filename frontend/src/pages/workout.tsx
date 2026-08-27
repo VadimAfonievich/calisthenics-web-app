@@ -147,7 +147,15 @@ export function WorkoutCatalogPage() {
                 ? `/workout-session/${w.active_session_id}`
                 : workoutRoute(w.id);
             return route ? (
-              <Link className="workout-card" to={route} key={w.id}>
+              <Link className={`workout-card${w.cover_media_url ? " has-cover" : ""}`} to={route} key={w.id}>
+                {w.cover_media_url && (
+                  <img
+                    className="workout-card-cover"
+                    src={w.cover_media_url}
+                    alt=""
+                    loading="lazy"
+                  />
+                )}
                 <div>
                   <p className="eyebrow">
                     {w.program_name ? `${w.program_name} · ` : ""}{w.difficulty}

@@ -63,6 +63,7 @@ type CatalogItem struct {
 	ProgramName     string  `json:"program_name,omitempty"`
 	Category        string  `json:"category"`
 	WarmupEnabled   bool    `json:"warmup_enabled"`
+	CoverMediaURL   string  `json:"cover_media_url,omitempty"`
 	Status          *string `json:"status,omitempty"`
 	ActiveSessionID *string `json:"active_session_id,omitempty"`
 }
@@ -142,7 +143,7 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	return w, rows.Err()
 }
 func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error) {
-	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COUNT(we.id)::int,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,active.status,active.id::text FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE w.status='published' GROUP BY w.id,p.id,active.status,active.id ORDER BY w.category,w.difficulty,p.name,w.sort_order,w.day_number NULLS LAST`, userID)
+	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COUNT(we.id)::int,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,COALESCE(m.url,''),active.status,active.id::text FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE w.status='published' GROUP BY w.id,p.id,m.id,active.status,active.id ORDER BY w.category,w.difficulty,p.name,w.sort_order,w.day_number NULLS LAST`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +151,7 @@ func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error
 	items := []CatalogItem{}
 	for rows.Next() {
 		var item CatalogItem
-		if err = rows.Scan(&item.ID, &item.Title, &item.Description, &item.Minutes, &item.Difficulty, &item.ExerciseCount, &item.ProgramID, &item.ProgramName, &item.Category, &item.WarmupEnabled, &item.Status, &item.ActiveSessionID); err != nil {
+		if err = rows.Scan(&item.ID, &item.Title, &item.Description, &item.Minutes, &item.Difficulty, &item.ExerciseCount, &item.ProgramID, &item.ProgramName, &item.Category, &item.WarmupEnabled, &item.CoverMediaURL, &item.Status, &item.ActiveSessionID); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
