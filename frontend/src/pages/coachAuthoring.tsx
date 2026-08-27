@@ -25,6 +25,7 @@ import {
 } from "../api/coach";
 import { useSessionStore } from "../store/session";
 import { WorkoutBuilderFields } from "./WorkoutBuilderFields";
+import { skillMapGroups } from "../skillMapGroups";
 import "../authoringActions.css";
 export const kinds: {
   key: ContentKind;
@@ -1179,7 +1180,7 @@ function BuilderEditor({
           {diff}
         </select>
       </label>
-      {(kind === "programs" || kind === "skills") && (
+      {kind === "programs" && (
         <label>
           Категория
           <select
@@ -1408,7 +1409,7 @@ function BuilderEditor({
             />
           </label>
           <label>
-            Раздел карты
+            Категория навыка
             <select
               value={value.map_group ?? "basic"}
               onChange={(e) => change({
@@ -1416,12 +1417,13 @@ function BuilderEditor({
                 map_group: e.target.value as BuilderInput["map_group"],
               })}
             >
-              <option value="basic">Базовые навыки</option>
-              <option value="floor">Пол</option>
-              <option value="bar">Турник</option>
-              <option value="parallel_bars">Брусья</option>
+              {skillMapGroups.map((group) => (
+                <option value={group.id} key={group.id}>
+                  {group.title}
+                </option>
+              ))}
             </select>
-            <small>Определяет раздел навыка в общей карте ученика.</small>
+            <small>Определяет, где навык отображается на карте ученика.</small>
           </label>
           <label>
             Расположение в карте навыков

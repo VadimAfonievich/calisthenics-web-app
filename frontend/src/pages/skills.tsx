@@ -10,6 +10,7 @@ import {
 } from "../api/skills";
 import { isValidEntityID } from "../api/entityIds";
 import { useSessionStore } from "../store/session";
+import { skillMapGroups, skillMapGroupTitle } from "../skillMapGroups";
 
 const statusLabels = {
   locked: "Закрыт",
@@ -17,12 +18,6 @@ const statusLabels = {
   in_progress: "В процессе",
   mastered: "Освоен",
 };
-const skillGroups = [
-  { id: "basic", title: "Базовые навыки", description: "Фундамент силы, мобильности и контроля тела" },
-  { id: "floor", title: "Пол", description: "Упоры, балансы и элементы без снарядов" },
-  { id: "bar", title: "Турник", description: "Тяговые и силовые элементы на перекладине" },
-  { id: "parallel_bars", title: "Брусья", description: "Упоры и силовые элементы на брусьях" },
-] as const;
 const criterion = (type: string, value: number) =>
   type === "duration_seconds"
     ? `${value} сек`
@@ -72,7 +67,7 @@ export function SkillsPage() {
         <h2>Навыки</h2>
       </div>
       <div className="skill-map">
-        {skillGroups.map(group => {
+        {skillMapGroups.map(group => {
           const skills=query.data.nodes.filter(skill=>(skill.map_group ?? "basic")===group.id);
           if(!skills.length)return null;
           return <section className="skill-group" key={group.id}>
@@ -161,6 +156,7 @@ export function SkillDetailPage() {
   if (query.isError || !query.data)
     return <div className="notice error">Навык не найден.</div>;
   const { skill, levels, criteria = [] } = query.data,
+    completedLevels = levels.filter((x) => x.status === "completed").length,
     allComplete =
       levels.length > 0 && levels.every((x) => x.status === "completed");
   return (
@@ -168,6 +164,9 @@ export function SkillDetailPage() {
       <Link className="text-link" to="/skills">
         ← Карта навыков
       </Link>
+      <p className="eyebrow">
+        НАВЫКИ → {skillMapGroupTitle(skill.map_group).toUpperCase()}
+      </p>
       {skill.cover_media_url && (
         <img className="lesson-cover" src={skill.cover_media_url} alt="" />
       )}
@@ -178,6 +177,7 @@ export function SkillDetailPage() {
         </p>
         <h2>{skill.name}</h2>
         <span>{skill.description}</span>
+        <b>Прогресс: {completedLevels} / {levels.length}</b>
         <div className="progress-track">
           <i style={{ width: `${skill.progress_percent}%` }} />
         </div>
