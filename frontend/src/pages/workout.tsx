@@ -161,7 +161,6 @@ export function WorkoutCatalogPage() {
                     {w.program_name ? `${w.program_name} · ` : ""}{w.difficulty}
                   </p>
                   <h3>{w.title}</h3>
-                  <p>{w.description}</p>
                 </div>
                 <footer>
                   <span>{w.estimated_minutes} мин</span>
