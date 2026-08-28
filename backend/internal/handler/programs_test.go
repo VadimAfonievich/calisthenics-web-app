@@ -12,14 +12,20 @@ import (
 )
 
 type programStoreStub struct {
-	items []programs.Program
-	item  programs.Program
-	err   error
+	items    []programs.Program
+	item     programs.Program
+	progress programs.Progress
+	err      error
 }
 
-func (s programStoreStub) List(context.Context) ([]programs.Program, error) { return s.items, s.err }
-func (s programStoreStub) Get(context.Context, string) (programs.Program, error) {
+func (s programStoreStub) List(context.Context, string) ([]programs.Program, error) {
+	return s.items, s.err
+}
+func (s programStoreStub) Get(context.Context, string, string) (programs.Program, error) {
 	return s.item, s.err
+}
+func (s programStoreStub) Start(context.Context, string, string) (programs.Progress, error) {
+	return s.progress, s.err
 }
 func TestListProgramsContract(t *testing.T) {
 	store := programStoreStub{items: []programs.Program{{ID: "1", Name: "Published", Slug: "published", Difficulty: "beginner", DurationWeeks: 4}}}
@@ -52,6 +58,16 @@ func TestProgramsRouteRequiresAuth(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/programs", nil))
 	if w.Code != 401 {
+		t.Fatalf("got %d: %s", w.Code, w.Body.String())
+	}
+}
+func TestStartProgramContract(t *testing.T) {
+	store := programStoreStub{progress: programs.Progress{ProgramID: "p", Status: "active", CurrentLevel: 1}}
+	route := chi.NewRouter()
+	route.Post("/programs/{id}/start", startProgram(store))
+	w := httptest.NewRecorder()
+	route.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/programs/p/start", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"status":"active"`) {
 		t.Fatalf("got %d: %s", w.Code, w.Body.String())
 	}
 }

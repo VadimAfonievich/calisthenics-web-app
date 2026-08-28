@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { getProgram, listPrograms } from "../api/programs";
+import { getProgram, listPrograms, startProgram } from "../api/programs";
 import { isValidEntityID } from "../api/entityIds";
 import { useSessionStore } from "../store/session";
 const difficulty: Record<string, string> = {
@@ -38,12 +38,14 @@ export function ProgramsPage() {
 export function ProgramDetailPage() {
   const { id = "" } = useParams(),
     token = useSessionStore((s) => s.accessToken),
+    client = useQueryClient(),
     valid = isValidEntityID(id),
     q = useQuery({
       queryKey: ["program", id],
       queryFn: () => getProgram(token!, id),
       enabled: !!token && valid,
     });
+  const start = useMutation({mutationFn:()=>startProgram(token!,id),onSuccess:()=>{client.invalidateQueries({queryKey:["program",id]});client.invalidateQueries({queryKey:["home-programs"]})}});
   if (!valid) return <p className="notice error">Некорректная программа.</p>;
   if (q.isLoading)
     return <p className="notice skeleton">Загружаем программу…</p>;
@@ -73,16 +75,20 @@ export function ProgramDetailPage() {
         <span>{p.description}</span>
         <b>{p.workout_count} тренировок</b>
       </section>
+      {!p.progress_status && <button className="primary-button" disabled={start.isPending} onClick={()=>start.mutate()}>{start.isPending?"Запускаем…":"Начать программу"}</button>}
+      {p.progress_status==="active"&&<p className="notice success">Программа активна · текущий этап: {p.current_stage}</p>}
+      {p.progress_status==="completed"&&<p className="notice success">Программа завершена</p>}
       <h3>Этапы программы</h3>
       {levels.map((level, levelIndex) => (
-        <section className="stack card" key={level.id}>
+        <section className={`stack card program-level ${level.status??""}`} key={level.id}>
           <header>
             <p className="eyebrow">ЭТАП {levelIndex + 1}</p>
             <h3>{level.title}</h3>
             <p>{level.description}</p>
+            {level.status&&<b>{level.status==="completed"?"✓ Завершён":level.status==="current"?"→ Текущий этап":"🔒 Закрыт"}</b>}
           </header>
           {level.workouts.map((w, workoutIndex) => (
-            <Link className="workout-card" to={`/workouts/${w.id}`} key={w.id}>
+            <Link className="workout-card" to={level.status==="locked"?"#":`/workouts/${w.id}`} aria-disabled={level.status==="locked"} key={w.id}>
               <p className="eyebrow">
                 {workoutIndex + 1}. {difficulty[w.difficulty] ?? w.difficulty}
               </p>

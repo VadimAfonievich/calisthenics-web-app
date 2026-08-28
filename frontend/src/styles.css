@@ -458,6 +458,14 @@ textarea {
 .workout-card.has-cover p:not(.eyebrow) {
   color: rgb(226 232 240/0.88);
 }
+.home-identity { display:flex;align-items:center;gap:12px;padding:4px 2px }
+.home-identity img,.home-identity>span { display:grid;width:42px;height:42px;place-items:center;border-radius:50%;background:var(--tg-accent);object-fit:cover;font-weight:800 }
+.home-identity div { display:grid;gap:3px }.home-identity small { color:var(--tg-muted) }
+.continue-card { padding:20px }.home-summary article { min-width:0 }.home-summary span { font-size:.7rem }
+.home-categories { display:grid;grid-template-columns:1fr 1fr }.home-categories a { padding:12px;border:1px solid rgb(96 165 250/.3);border-radius:12px;color:var(--tg-text);text-align:center;text-decoration:none }
+.skill-category-preview { display:flex;flex-wrap:wrap;gap:8px }.skill-category-preview span { padding:8px 10px;border-radius:10px;background:rgb(96 165 250/.12);font-size:.75rem }
+.user-role-card { display:flex;align-items:center;justify-content:space-between;gap:12px }.user-role-card h3,.user-role-card p { margin:0 0 4px }
+.program-level.locked { opacity:.62 }.program-level [aria-disabled="true"] { pointer-events:none }
 .workout-card h3,
 .workout-card p {
   margin: 6px 0 0;

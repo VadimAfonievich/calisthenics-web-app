@@ -27,6 +27,7 @@ import {
   CoachEditor,
 } from "../pages/coachAuthoring";
 import { ProgramsPage, ProgramDetailPage } from "../pages/programs";
+import { SuperAdminUsersPage } from "../pages/superAdmin";
 const guarded = (page: ReactNode) => <CoachGuard>{page}</CoachGuard>;
 export function AppRouter() {
   return (
@@ -67,6 +68,7 @@ export function AppRouter() {
         />
         <Route path="admin" element={<AdminPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="super-admin/users" element={<SuperAdminUsersPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

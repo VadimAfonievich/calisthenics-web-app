@@ -175,6 +175,16 @@ func (s *Service) Start(ctx context.Context, u, w string, in StartInput) (Sessio
 	if e != nil {
 		return Session{}, e
 	}
+	if workout.ProgramID != "" {
+		var allowed bool
+		e = s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workouts w JOIN program_levels pl ON pl.id=w.program_level_id JOIN user_program_progress upp ON upp.program_id=w.program_id AND upp.user_id=$1::uuid WHERE w.id=$2::uuid AND (upp.status='completed' OR upp.current_level>=pl.level_number))`, u, w).Scan(&allowed)
+		if e != nil {
+			return Session{}, e
+		}
+		if !allowed {
+			return Session{}, ErrForbidden
+		}
+	}
 	purpose := "main"
 	plannedForSession := in.PlannedWorkoutID
 	if in.FollowUpWorkoutID != nil {
@@ -384,6 +394,18 @@ func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (
 		return x, e
 	}
 	_, e = tx.Exec(ctx, `UPDATE profiles SET xp=xp+$2,level=(SELECT level FROM levels WHERE min_xp<=xp+$2 ORDER BY min_xp DESC LIMIT 1),current_streak=$3,longest_streak=$4,last_workout_date=$5 WHERE user_id=$1::uuid`, u, x.XP, x.CurrentStreak, longest, today)
+	if e != nil {
+		return x, e
+	}
+	_, e = tx.Exec(ctx, `WITH target AS (SELECT w.program_id FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id WHERE ws.id=$1::uuid), next_level AS (SELECT min(pl.level_number) level_number FROM program_levels pl JOIN target t ON t.program_id=pl.program_id WHERE EXISTS(SELECT 1 FROM workouts w WHERE w.program_level_id=pl.id AND w.status='published' AND NOT EXISTS(SELECT 1 FROM workout_sessions done WHERE done.user_id=$2::uuid AND done.workout_id=w.id AND done.status='completed'))) UPDATE user_program_progress upp SET current_level=COALESCE(n.level_number,upp.current_level),status=CASE WHEN n.level_number IS NULL THEN 'completed' ELSE 'active' END,completed_at=CASE WHEN n.level_number IS NULL THEN COALESCE(upp.completed_at,NOW()) ELSE NULL END FROM target t CROSS JOIN next_level n WHERE upp.user_id=$2::uuid AND upp.program_id=t.program_id AND upp.status='active'`, sid, u)
+	if e != nil {
+		return x, e
+	}
+	_, e = tx.Exec(ctx, `WITH target AS (SELECT w.program_level_id FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id WHERE ws.id=$1::uuid), eligible AS (SELECT sl.id,sl.skill_id,sl.level_number,sl.criterion_value FROM skill_levels sl JOIN target t ON t.program_level_id=sl.program_level_id WHERE sl.criterion_type='workout_completed' AND (SELECT count(DISTINCT done.workout_id) FROM workout_sessions done JOIN workouts dw ON dw.id=done.workout_id WHERE done.user_id=$2::uuid AND done.status='completed' AND dw.program_level_id=sl.program_level_id)>=sl.criterion_value AND NOT EXISTS(SELECT 1 FROM skill_levels prior LEFT JOIN user_skill_level_progress p ON p.skill_level_id=prior.id AND p.user_id=$2::uuid WHERE prior.skill_id=sl.skill_id AND prior.level_number<sl.level_number AND p.status IS DISTINCT FROM 'completed')) INSERT INTO user_skill_level_progress(user_id,skill_level_id,status,progress_value,completed_at) SELECT $2::uuid,id,'completed',criterion_value,NOW() FROM eligible ON CONFLICT(user_id,skill_level_id) DO UPDATE SET status='completed',progress_value=GREATEST(user_skill_level_progress.progress_value,EXCLUDED.progress_value),completed_at=COALESCE(user_skill_level_progress.completed_at,NOW()),updated_at=NOW()`, sid, u)
+	if e != nil {
+		return x, e
+	}
+	_, e = tx.Exec(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,current_level,status,started_at) SELECT $1::uuid,sl.skill_id,max(sl.level_number)+1,'in_progress',NOW() FROM user_skill_level_progress p JOIN skill_levels sl ON sl.id=p.skill_level_id WHERE p.user_id=$1::uuid AND p.status='completed' GROUP BY sl.skill_id ON CONFLICT(user_id,skill_id) DO UPDATE SET current_level=GREATEST(user_skill_progress.current_level,EXCLUDED.current_level),status=CASE WHEN user_skill_progress.status='mastered' THEN 'mastered' ELSE 'in_progress' END,updated_at=NOW()`, u)
 	if e != nil {
 		return x, e
 	}

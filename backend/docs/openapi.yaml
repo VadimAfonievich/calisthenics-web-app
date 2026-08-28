@@ -84,6 +84,45 @@ paths:
         '200': {description: Published program}
         '401': {description: Missing or invalid access token}
         '404': {description: Program not found}
+  /api/v1/programs/{id}/start:
+    post:
+      summary: Idempotently start a published program for the current user
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Current user program progress}
+        '401': {description: Missing or invalid access token}
+        '403': {description: Content access denied}
+        '404': {description: Program not found}
+  /api/v1/super-admin/users:
+    get:
+      summary: Search users for role administration
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: search, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Minimal user role results}
+        '403': {description: Super administrator role required}
+  /api/v1/super-admin/users/{id}/role:
+    put:
+      summary: Promote a user to coach or remove the coach role
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: {type: string, enum: [user, coach]}
+      responses:
+        '200': {description: Role updated and audited}
+        '403': {description: Super administrator role required}
+        '409': {description: Unsafe or protected role change rejected}
   /api/v1/workouts:
     get:
       summary: List workouts from published programs

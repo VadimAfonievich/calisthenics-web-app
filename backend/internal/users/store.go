@@ -36,6 +36,14 @@ func AvailableModes(role string) []string {
 
 type Store struct{ pool *pgxpool.Pool }
 
+type RoleUser struct {
+	ID          string `json:"id"`
+	TelegramID  int64  `json:"telegram_id"`
+	Username    string `json:"username,omitempty"`
+	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
+}
+
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 func (s *Store) UpsertTelegramUser(ctx context.Context, telegramUser auth.TelegramUser) (User, error) {
@@ -75,4 +83,55 @@ FROM users u JOIN profiles p ON p.user_id = u.id LEFT JOIN admin_users a ON a.us
 	}
 	user.AvailableModes = AvailableModes(user.Role)
 	return user, nil
+}
+
+func (s *Store) SearchRoleUsers(ctx context.Context, query string) ([]RoleUser, error) {
+	rows, err := s.pool.Query(ctx, `SELECT u.id::text,u.telegram_id,COALESCE(u.username,''),p.display_name,COALESCE(a.role,'user') FROM users u JOIN profiles p ON p.user_id=u.id LEFT JOIN admin_users a ON a.user_id=u.id WHERE $1='' OR COALESCE(u.username,'') ILIKE '%'||$1||'%' OR p.display_name ILIKE '%'||$1||'%' OR u.telegram_id::text=$1 ORDER BY p.display_name LIMIT 30`, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []RoleUser{}
+	for rows.Next() {
+		var x RoleUser
+		if err = rows.Scan(&x.ID, &x.TelegramID, &x.Username, &x.DisplayName, &x.Role); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) SetCoachRole(ctx context.Context, actor, target, role string) error {
+	if actor == target || (role != "user" && role != "coach") {
+		return fmt.Errorf("unsafe role change")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var actorRole, oldRole string
+	if err = tx.QueryRow(ctx, `SELECT role FROM admin_users WHERE user_id=$1::uuid`, actor).Scan(&actorRole); err != nil || actorRole != "super_admin" {
+		return fmt.Errorf("super admin required")
+	}
+	if err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT role FROM admin_users WHERE user_id=$1::uuid),'user')`, target).Scan(&oldRole); err != nil {
+		return err
+	}
+	if oldRole == "admin" || oldRole == "super_admin" {
+		return fmt.Errorf("protected role")
+	}
+	if role == "coach" {
+		_, err = tx.Exec(ctx, `INSERT INTO admin_users(user_id,role) VALUES($1::uuid,'coach') ON CONFLICT(user_id) DO UPDATE SET role='coach',updated_at=NOW()`, target)
+	} else {
+		_, err = tx.Exec(ctx, `DELETE FROM admin_users WHERE user_id=$1::uuid AND role='coach'`, target)
+	}
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO role_change_audit(actor_user_id,target_user_id,old_role,new_role) VALUES($1::uuid,$2::uuid,$3,$4)`, actor, target, oldRole, role)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
