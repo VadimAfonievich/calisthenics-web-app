@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react'
 import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query'
-import {copyShareLink,getCoachSpace,tenantShareLink,updateCoachSpace,updateCoachSpaceSlug,type Tenant} from '../api/tenants'
+import {copyShareLink,getCoachSpace,tenantShareLink,updateCoachSpace,updateCoachSpaceAvatar,updateCoachSpaceSlug,type Tenant} from '../api/tenants'
+import {addExternalMedia} from '../api/coach'
 import {useSessionStore} from '../store/session'
 
 const slugPattern=/^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -13,10 +14,12 @@ export function TenantSettingsPage(){
   const accept=(tenant:Tenant)=>{qc.setQueryData(['coach-space'],{tenant});updateCurrentTenant(tenant)}
   const save=useMutation({mutationFn:()=>updateCoachSpace(token,{name:name.trim(),description:description.trim()}),onSuccess:data=>{accept(data.tenant);setSaved(true)}})
   const changeSlug=useMutation({mutationFn:()=>updateCoachSpaceSlug(token,slug),onSuccess:data=>{accept(data.tenant);setSlug(data.tenant.slug);setConfirmSlug(false);setCopied(false)}})
+  const avatar=useMutation({mutationFn:async(file?:File)=>{if(!file)return updateCoachSpaceAvatar(token);if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error('format');const url=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(file)});const created=await addExternalMedia(token,{type:'image',url,original_filename:file.name,mime_type:file.type,size_bytes:file.size});return updateCoachSpaceAvatar(token,created.media.id)},onSuccess:data=>accept(data.tenant)})
   if(!q.data)return <div className="notice skeleton">Загружаем пространство…</div>
   const t=q.data.tenant,dirty=name.trim()!==t.name||description.trim()!==(t.description??''),slugDirty=slug!==t.slug,slugValid=slug.length>=2&&slug.length<=63&&slugPattern.test(slug),nextLink=tenantShareLink(slug)
   return <div className="stack tenant-settings">
     <div><p className="eyebrow">МОЯ ШКОЛА</p><h2>Настройки школы</h2></div>
+    <section className="card stack school-avatar-settings"><h3>Аватар школы</h3>{t.avatar_url?<img className="tenant-avatar settings-avatar" src={t.avatar_url} alt="Аватар школы"/>:<span className="tenant-avatar tenant-avatar-fallback settings-avatar">{t.avatar_initials}</span>}<label className="button-file"><span>Загрузить фото</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0];if(file)avatar.mutate(file)}}/></label>{t.telegram_avatar_url&&t.avatar_media_id&&<button className="secondary-button" onClick={()=>avatar.mutate(undefined)}>Использовать фото Telegram</button>}{t.avatar_media_id&&<button className="secondary-button" onClick={()=>avatar.mutate(undefined)}>Удалить фото</button>}<small className="muted">JPEG, PNG или WebP, до 10 МБ. Фото будет обрезано по центру.</small>{avatar.isError&&<span className="field-error">Не удалось сохранить фото.</span>}</section>
     <section className="card stack settings-form">
       <label><span>Название школы</span><input className="editable-control" value={name} maxLength={120} onChange={e=>{setName(e.target.value);setSaved(false)}} placeholder="Название школы"/></label>
       <label><span>Описание для учеников</span><textarea className="editable-control" value={description} maxLength={1000} onChange={e=>{setDescription(e.target.value);setSaved(false)}} placeholder="Расскажите ученикам о тренировках, подходе или целях школы."/></label>

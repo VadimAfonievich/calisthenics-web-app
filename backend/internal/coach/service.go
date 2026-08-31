@@ -369,6 +369,7 @@ func (s *Service) Get(ctx context.Context, kind, id, user string, role Role) (ma
 	if kind == "exercises" {
 		condition = "tenant_id=$2::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)"
 	}
+	if kind == "workouts" { condition = "tenant_id=$2::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)" }
 	q := fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE id=$1::uuid AND (%s)", x.table, condition)
 	var raw []byte
 	if e := s.pool.QueryRow(ctx, q, id, tenant).Scan(&raw); errors.Is(e, pgx.ErrNoRows) {
@@ -428,8 +429,8 @@ func (s *Service) Options(ctx context.Context, user string, role Role) (Options,
 		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM exercises WHERE status<>'archived' AND (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)) ORDER BY name`, &out.Exercises, true},
 		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM programs WHERE status<>'archived' AND tenant_id=$1::uuid ORDER BY name`, &out.Programs, true},
 		{`SELECT pl.id::text,p.name||' · '||pl.title,p.status,pl.difficulty,0,pl.sort_order,p.owner_user_id::text,p.id::text FROM program_levels pl JOIN programs p ON p.id=pl.program_id WHERE p.status<>'archived' AND p.tenant_id=$1::uuid ORDER BY p.name,pl.sort_order`, &out.ProgramLevels, true},
-		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,w.program_level_id::text FROM workouts w WHERE w.status<>'archived' AND w.tenant_id=$1::uuid ORDER BY w.title`, &out.Workouts, true},
-		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,NULL::text FROM workouts w WHERE w.status='published' AND w.category='warmup' AND w.tenant_id=$1::uuid ORDER BY w.is_default_warmup DESC,w.title`, &out.Warmups, true},
+		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,w.program_level_id::text FROM workouts w WHERE w.status<>'archived' AND (w.tenant_id=$1::uuid OR (w.tenant_id IS NULL AND w.standard_key IS NOT NULL)) ORDER BY (w.standard_key IS NULL),w.title`, &out.Workouts, true},
+		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,NULL::text FROM workouts w WHERE w.status='published' AND w.category='warmup' AND (w.tenant_id=$1::uuid OR (w.tenant_id IS NULL AND w.standard_key IS NOT NULL)) ORDER BY w.is_default_warmup DESC,w.title`, &out.Warmups, true},
 		{`SELECT id::text,name,status,difficulty,0,sort_order,owner_user_id::text,NULL::text FROM skills WHERE status<>'archived' AND tenant_id=$1::uuid ORDER BY CASE WHEN sort_order=0 THEN 2147483647 ELSE sort_order END,name,id`, &out.Skills, true},
 		{`SELECT id::text,CASE WHEN type='image' THEN 'Фото: ' ELSE 'Видео: ' END||original_filename FROM media_assets WHERE status='ready' AND tenant_id=$1::uuid ORDER BY created_at DESC`, &out.Media, false},
 	}
@@ -503,6 +504,7 @@ func (s *Service) List(ctx context.Context, kind, user string, role Role, search
 	if kind == "exercises" {
 		where = " WHERE (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL))"
 	}
+	if kind == "workouts" { where = " WHERE (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL))" }
 	if search != "" {
 		args = append(args, "%"+search+"%")
 		where += fmt.Sprintf(" AND "+x.name+" ILIKE $%d", len(args))
@@ -1121,7 +1123,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		defer tx.Rollback(ctx)
 		var out string
-		e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,sort_order,owner_user_id,status,cover_media_id,category,warmup_enabled,warmup_workout_id,tenant_id) SELECT title||' — копия',description,difficulty,estimated_minutes,0,$2::uuid,'draft',cover_media_id,category,warmup_enabled,warmup_workout_id,$3::uuid FROM workouts w WHERE id=$1::uuid AND tenant_id=$3::uuid AND owner_user_id=$2::uuid RETURNING id::text`, id, user, tenant).Scan(&out)
+		e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,sort_order,owner_user_id,status,cover_media_id,category,warmup_enabled,warmup_workout_id,tenant_id) SELECT title||' — копия',description,difficulty,estimated_minutes,0,$2::uuid,'draft',CASE WHEN tenant_id=$3::uuid THEN cover_media_id ELSE NULL END,category,warmup_enabled,warmup_workout_id,$3::uuid FROM workouts w WHERE id=$1::uuid AND ((tenant_id=$3::uuid AND owner_user_id=$2::uuid) OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)) RETURNING id::text`, id, user, tenant).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}

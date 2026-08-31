@@ -47,6 +47,7 @@ type Workout struct {
 	DefaultWarmup   *Warmup    `json:"default_warmup,omitempty"`
 	CoverMediaURL   string     `json:"cover_media_url,omitempty"`
 	Exercises       []Exercise `json:"exercises"`
+	System          bool       `json:"system"`
 }
 type Warmup struct {
 	ID      string `json:"id"`
@@ -67,6 +68,7 @@ type CatalogItem struct {
 	CoverMediaURL   string  `json:"cover_media_url,omitempty"`
 	Status          *string `json:"status,omitempty"`
 	ActiveSessionID *string `json:"active_session_id,omitempty"`
+	System          bool    `json:"system"`
 }
 type Session struct {
 	ID                   string    `json:"id"`
@@ -117,7 +119,7 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 		return Workout{}, ErrNotFound
 	}
 	var w Workout
-	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,w.warmup_workout_id::text,COALESCE(m.url,'') FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id WHERE w.id=$1::uuid AND w.tenant_id=$2::uuid AND w.status='published'`, id, tenant).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName, &w.Category, &w.WarmupEnabled, &w.WarmupWorkoutID, &w.CoverMediaURL)
+	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,w.warmup_workout_id::text,COALESCE(m.url,''),w.standard_key IS NOT NULL FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id WHERE w.id=$1::uuid AND (w.tenant_id=$2::uuid OR (w.tenant_id IS NULL AND w.standard_key IS NOT NULL)) AND w.status='published'`, id, tenant).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName, &w.Category, &w.WarmupEnabled, &w.WarmupWorkoutID, &w.CoverMediaURL, &w.System)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return w, ErrNotFound
 	}
@@ -126,7 +128,7 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	}
 	if w.WarmupEnabled && w.Category != "warmup" {
 		var warmup Warmup
-		e = s.pool.QueryRow(ctx, `SELECT id::text,title,estimated_minutes FROM workouts WHERE tenant_id=$2::uuid AND category='warmup' AND status='published' AND ($1::uuid IS NULL OR id=$1::uuid) ORDER BY is_default_warmup DESC,sort_order,id LIMIT 1`, w.WarmupWorkoutID, tenant).Scan(&warmup.ID, &warmup.Title, &warmup.Minutes)
+		e = s.pool.QueryRow(ctx, `SELECT id::text,title,estimated_minutes FROM workouts WHERE (tenant_id=$2::uuid OR (tenant_id IS NULL AND standard_key IS NOT NULL)) AND category='warmup' AND status='published' AND ($1::uuid IS NULL OR id=$1::uuid) ORDER BY CASE WHEN $1::uuid IS NOT NULL THEN 0 WHEN tenant_id=$2::uuid THEN 1 ELSE 2 END,is_default_warmup DESC,sort_order,id LIMIT 1`, w.WarmupWorkoutID, tenant).Scan(&warmup.ID, &warmup.Title, &warmup.Minutes)
 		if e == nil {
 			w.DefaultWarmup = &warmup
 		} else if !errors.Is(e, pgx.ErrNoRows) {
@@ -152,7 +154,7 @@ func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error
 	if !ok {
 		return []CatalogItem{}, nil
 	}
-	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COUNT(we.id)::int,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,COALESCE(m.url,''),active.status,active.id::text FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid AND ws.tenant_id=$2::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE w.tenant_id=$2::uuid AND w.status='published' GROUP BY w.id,p.id,m.id,active.status,active.id ORDER BY w.category,w.difficulty,p.name,w.sort_order,w.day_number NULLS LAST`, userID, tenant)
+	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COUNT(we.id)::int,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,COALESCE(m.url,''),active.status,active.id::text,w.standard_key IS NOT NULL FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid AND ws.tenant_id=$2::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE (w.tenant_id=$2::uuid OR (w.tenant_id IS NULL AND w.standard_key IS NOT NULL)) AND w.status='published' GROUP BY w.id,p.id,m.id,active.status,active.id ORDER BY (w.standard_key IS NULL),w.category,w.difficulty,p.name,w.sort_order,w.day_number NULLS LAST`, userID, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +162,7 @@ func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error
 	items := []CatalogItem{}
 	for rows.Next() {
 		var item CatalogItem
-		if err = rows.Scan(&item.ID, &item.Title, &item.Description, &item.Minutes, &item.Difficulty, &item.ExerciseCount, &item.ProgramID, &item.ProgramName, &item.Category, &item.WarmupEnabled, &item.CoverMediaURL, &item.Status, &item.ActiveSessionID); err != nil {
+		if err = rows.Scan(&item.ID, &item.Title, &item.Description, &item.Minutes, &item.Difficulty, &item.ExerciseCount, &item.ProgramID, &item.ProgramName, &item.Category, &item.WarmupEnabled, &item.CoverMediaURL, &item.Status, &item.ActiveSessionID, &item.System); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

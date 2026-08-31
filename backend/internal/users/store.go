@@ -32,16 +32,33 @@ type User struct {
 }
 
 type Tenant struct {
-	ID          string `json:"id"`
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	Role        string `json:"role"`
-	Description string `json:"description,omitempty"`
-	Status      string `json:"status,omitempty"`
-	OwnerUserID string `json:"owner_user_id,omitempty"`
-	OwnerName   string `json:"owner_name,omitempty"`
-	CreatedAt   string `json:"created_at,omitempty"`
-	Students    int    `json:"students,omitempty"`
+	ID                string `json:"id"`
+	Slug              string `json:"slug"`
+	Name              string `json:"name"`
+	Role              string `json:"role"`
+	Description       string `json:"description,omitempty"`
+	Status            string `json:"status,omitempty"`
+	OwnerUserID       string `json:"owner_user_id,omitempty"`
+	OwnerName         string `json:"owner_name,omitempty"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	Students          int    `json:"students,omitempty"`
+	AvatarMediaID     string `json:"avatar_media_id,omitempty"`
+	AvatarURL         string `json:"avatar_url,omitempty"`
+	TelegramAvatarURL string `json:"telegram_avatar_url,omitempty"`
+	AvatarInitials    string `json:"avatar_initials"`
+}
+
+func finishTenant(t *Tenant) {
+	words := strings.Fields(t.Name)
+	for i, word := range words {
+		if i == 2 {
+			break
+		}
+		r := []rune(word)
+		if len(r) > 0 {
+			t.AvatarInitials += strings.ToUpper(string(r[0]))
+		}
+	}
 }
 
 func AvailableModes(role string) []string {
@@ -120,14 +137,15 @@ FROM users u JOIN profiles p ON p.user_id = u.id LEFT JOIN admin_users a ON a.us
 	if err != nil {
 		return User{}, err
 	}
-	rows, tenantErr := s.pool.Query(ctx, `SELECT t.id::text,t.slug,t.name,m.role,t.description FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY t.name`, id)
+	rows, tenantErr := s.pool.Query(ctx, `SELECT t.id::text,t.slug,t.name,m.role,t.description,COALESCE(t.avatar_media_id::text,''),COALESCE(am.url,NULLIF(t.avatar_url,''),u.photo_url,''),COALESCE(u.photo_url,'') FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id JOIN users u ON u.id=t.owner_user_id LEFT JOIN media_assets am ON am.id=t.avatar_media_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY t.name`, id)
 	if tenantErr == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var t Tenant
-			if err = rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Role, &t.Description); err != nil {
+			if err = rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Role, &t.Description, &t.AvatarMediaID, &t.AvatarURL, &t.TelegramAvatarURL); err != nil {
 				return User{}, err
 			}
+			finishTenant(&t)
 			user.Tenants = append(user.Tenants, t)
 		}
 		if err = rows.Err(); err != nil {
@@ -163,7 +181,7 @@ func (s *Store) BootstrapTenant(ctx context.Context, userID, slug string) (*Tena
 	defer tx.Rollback(ctx)
 	var t Tenant
 	if slug != "" {
-		err = tx.QueryRow(ctx, `SELECT id::text,slug,name,description FROM tenants WHERE slug=$1 AND status='active'`, slug).Scan(&t.ID, &t.Slug, &t.Name, &t.Description)
+		err = tx.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,t.description,COALESCE(t.avatar_media_id::text,''),COALESCE(am.url,NULLIF(t.avatar_url,''),u.photo_url,''),COALESCE(u.photo_url,'') FROM tenants t JOIN users u ON u.id=t.owner_user_id LEFT JOIN media_assets am ON am.id=t.avatar_media_id WHERE t.slug=$1 AND t.status='active'`, slug).Scan(&t.ID, &t.Slug, &t.Name, &t.Description, &t.AvatarMediaID, &t.AvatarURL, &t.TelegramAvatarURL)
 		if err != nil {
 			return nil, err
 		}
@@ -172,7 +190,7 @@ func (s *Store) BootstrapTenant(ctx context.Context, userID, slug string) (*Tena
 			return nil, err
 		}
 	} else {
-		err = tx.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,t.description FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY m.updated_at DESC LIMIT 1`, userID).Scan(&t.ID, &t.Slug, &t.Name, &t.Description)
+		err = tx.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,t.description,COALESCE(t.avatar_media_id::text,''),COALESCE(am.url,NULLIF(t.avatar_url,''),u.photo_url,''),COALESCE(u.photo_url,'') FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id JOIN users u ON u.id=t.owner_user_id LEFT JOIN media_assets am ON am.id=t.avatar_media_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY m.updated_at DESC LIMIT 1`, userID).Scan(&t.ID, &t.Slug, &t.Name, &t.Description, &t.AvatarMediaID, &t.AvatarURL, &t.TelegramAvatarURL)
 		if err != nil {
 			return nil, nil
 		}
@@ -183,6 +201,7 @@ func (s *Store) BootstrapTenant(ctx context.Context, userID, slug string) (*Tena
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	finishTenant(&t)
 	return &t, nil
 }
 
@@ -193,10 +212,11 @@ func (s *Store) ResolveTenant(ctx context.Context, userID, slug string) (*Tenant
 		return nil, nil
 	}
 	var t Tenant
-	err := s.pool.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,m.role,t.description FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND t.slug=$2 AND m.status='active' AND t.status='active'`, userID, slug).Scan(&t.ID, &t.Slug, &t.Name, &t.Role, &t.Description)
+	err := s.pool.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,m.role,t.description,COALESCE(t.avatar_media_id::text,''),COALESCE(am.url,NULLIF(t.avatar_url,''),u.photo_url,''),COALESCE(u.photo_url,'') FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id JOIN users u ON u.id=t.owner_user_id LEFT JOIN media_assets am ON am.id=t.avatar_media_id WHERE m.user_id=$1::uuid AND t.slug=$2 AND m.status='active' AND t.status='active'`, userID, slug).Scan(&t.ID, &t.Slug, &t.Name, &t.Role, &t.Description, &t.AvatarMediaID, &t.AvatarURL, &t.TelegramAvatarURL)
 	if err != nil {
 		return nil, err
 	}
+	finishTenant(&t)
 	return &t, nil
 }
 
@@ -218,8 +238,20 @@ func (s *Store) ListTenants(ctx context.Context) ([]Tenant, error) {
 }
 func (s *Store) GetTenant(ctx context.Context, id string) (Tenant, error) {
 	var t Tenant
-	e := s.pool.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,t.description,t.status,t.owner_user_id::text,p.display_name,t.created_at::text,count(m.user_id) FILTER(WHERE m.role='student' AND m.status='active')::int FROM tenants t JOIN profiles p ON p.user_id=t.owner_user_id LEFT JOIN tenant_memberships m ON m.tenant_id=t.id WHERE t.id=$1::uuid GROUP BY t.id,p.display_name`, id).Scan(&t.ID, &t.Slug, &t.Name, &t.Description, &t.Status, &t.OwnerUserID, &t.OwnerName, &t.CreatedAt, &t.Students)
+	e := s.pool.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,t.description,t.status,t.owner_user_id::text,p.display_name,t.created_at::text,count(m.user_id) FILTER(WHERE m.role='student' AND m.status='active')::int,COALESCE(t.avatar_media_id::text,''),COALESCE(am.url,NULLIF(t.avatar_url,''),u.photo_url,''),COALESCE(u.photo_url,'') FROM tenants t JOIN profiles p ON p.user_id=t.owner_user_id JOIN users u ON u.id=t.owner_user_id LEFT JOIN media_assets am ON am.id=t.avatar_media_id LEFT JOIN tenant_memberships m ON m.tenant_id=t.id WHERE t.id=$1::uuid GROUP BY t.id,p.display_name,am.url,u.photo_url`, id).Scan(&t.ID, &t.Slug, &t.Name, &t.Description, &t.Status, &t.OwnerUserID, &t.OwnerName, &t.CreatedAt, &t.Students, &t.AvatarMediaID, &t.AvatarURL, &t.TelegramAvatarURL)
+	finishTenant(&t)
 	return t, e
+}
+
+func (s *Store) UpdateOwnTenantAvatar(ctx context.Context, user, tenant string, mediaID *string) (Tenant, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE tenants t SET avatar_media_id=$3::uuid,updated_at=NOW() WHERE t.id=$2::uuid AND t.owner_user_id=$1::uuid AND EXISTS(SELECT 1 FROM tenant_memberships m WHERE m.tenant_id=t.id AND m.user_id=$1::uuid AND m.role='coach' AND m.status='active')`, user, tenant, mediaID)
+	if err != nil {
+		return Tenant{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return Tenant{}, fmt.Errorf("tenant forbidden")
+	}
+	return s.GetTenant(ctx, tenant)
 }
 func (s *Store) UpdateOwnTenant(ctx context.Context, user, tenant, name, description string) (Tenant, error) {
 	if len(strings.TrimSpace(name)) < 2 || len(name) > 120 || len(description) > 1000 {

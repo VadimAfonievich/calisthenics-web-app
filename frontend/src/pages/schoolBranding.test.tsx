@@ -1,0 +1,13 @@
+// @vitest-environment jsdom
+import {QueryClient,QueryClientProvider} from '@tanstack/react-query'
+import {cleanup,render,screen} from '@testing-library/react'
+import {MemoryRouter} from 'react-router-dom'
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest'
+import {useSessionStore} from '../store/session'
+import {HomePage} from './home'
+
+const mocks=vi.hoisted(()=>({listPrograms:vi.fn(),listSkills:vi.fn(),getToday:vi.fn(),listWorkouts:vi.fn(),getProgress:vi.fn()}))
+vi.mock('../api/programs',()=>({listPrograms:mocks.listPrograms}));vi.mock('../api/skills',()=>({listSkills:mocks.listSkills}));vi.mock('../api/calendar',()=>({getToday:mocks.getToday,occurrenceRoute:vi.fn()}));vi.mock('../api/workouts',()=>({listWorkouts:mocks.listWorkouts}));vi.mock('../api/progress',()=>({getProgress:mocks.getProgress}))
+beforeEach(()=>{mocks.listPrograms.mockResolvedValue({programs:[]});mocks.listSkills.mockResolvedValue({skills:[]});mocks.getToday.mockResolvedValue({occurrences:[]});mocks.listWorkouts.mockResolvedValue({workouts:[]});mocks.getProgress.mockResolvedValue({total_workouts:0})})
+afterEach(cleanup)
+describe('branding школы',()=>{it('показывает avatar, длинное название и описание только текущей школы',async()=>{useSessionStore.setState({accessToken:'t',status:'authenticated',user:{id:'u',first_name:'A',display_name:'A',level:1,xp:0,current_streak:0,timezone:'UTC',role:'user',available_modes:['student'],current_tenant:{id:'a',slug:'a',role:'student',name:'AFONICH CALISTHENICS SCHOOL С ОЧЕНЬ ДЛИННЫМ НАЗВАНИЕМ',description:'Описание школы',avatar_url:'https://example.com/school.webp',avatar_initials:'AC'},tenants:[{id:'b',slug:'b',role:'student',name:'Чужая школа',avatar_initials:'ЧШ'}]}});const {container}=render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><HomePage/></MemoryRouter></QueryClientProvider>);expect(container.querySelector('.tenant-avatar')?.getAttribute('src')).toBe('https://example.com/school.webp');expect(screen.getByText(/AFONICH CALISTHENICS/)).toBeTruthy();expect(screen.getByText('Описание школы')).toBeTruthy();expect(screen.queryByText('Чужая школа')).toBeNull()});it('показывает initials без изображения',()=>{useSessionStore.setState({accessToken:'t',status:'authenticated',user:{id:'u',first_name:'A',display_name:'A',level:1,xp:0,current_streak:0,timezone:'UTC',role:'user',available_modes:['student'],current_tenant:{id:'a',slug:'a',role:'student',name:'Alpha Club',avatar_initials:'AC'}}});render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><HomePage/></MemoryRouter></QueryClientProvider>);expect(screen.getByText('AC')).toBeTruthy()})})

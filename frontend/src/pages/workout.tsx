@@ -158,7 +158,7 @@ export function WorkoutCatalogPage() {
                 )}
                 <div>
                   <p className="eyebrow">
-                    {w.program_name ? `${w.program_name} · ` : ""}{w.difficulty}
+                    {w.system ? "Системная · " : ""}{w.program_name ? `${w.program_name} · ` : ""}{w.difficulty}
                   </p>
                   <h3>{w.title}</h3>
                 </div>

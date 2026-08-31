@@ -78,6 +78,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Get("/coach/space", coachSpace(dependencies.Auth.Users))
 			protected.Put("/coach/space", coachSpace(dependencies.Auth.Users))
 			protected.Put("/coach/space/slug", coachSpaceSlug(dependencies.Auth.Users))
+			protected.Put("/coach/space/avatar", coachSpaceAvatar(dependencies.Auth.Users))
 			protected.Get("/workouts", listWorkouts(dependencies.Workouts))
 			protected.Get("/workouts/today", today(dependencies.Workouts))
 			protected.Get("/workouts/{id}", getWorkout(dependencies.Workouts))

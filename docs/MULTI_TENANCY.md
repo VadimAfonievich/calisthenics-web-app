@@ -76,3 +76,8 @@ The old platform `coach` role is removed by migration 16 and is not accepted by 
 5. Deploy backend before frontend in a controlled maintenance window, verify generated spaces/share links, then enable traffic.
 
 No migration or deployment is performed automatically by this phase.
+# Global system content
+
+Platform content now has two explicit global classes: standard exercises and system workouts. Both use `tenant_id IS NULL`, `owner_user_id IS NULL`, a stable `standard_key`, and published status. System workouts are read-only, visible in every active tenant, and may reference only global standard exercises. A coach can duplicate one into the current school; the copy receives the current `tenant_id` and coach `owner_user_id` and is fully editable. Tenant workouts may combine global standard exercises with exercises owned by that same tenant.
+
+Production rollout is deliberately separate from application deployment: back up the database, apply migration 17, confirm the 247 standard-exercise catalog is present, then run `DATABASE_URL=... go run ./cmd/system-workouts` from `backend`. The importer is idempotent and stops with the missing `standard_key` if the catalog is incomplete. Verify `schema_migrations.dirty=false` and the four published workout keys before deploying the application. Rollback must be planned together with seeded data and any student sessions already referencing system workouts.

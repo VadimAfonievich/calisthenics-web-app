@@ -151,6 +151,22 @@ func TestCoachUUIDAttackMatrixPostgres(t *testing.T) {
 			}
 		}
 	}
+	var systemWorkout string
+	if err = pool.QueryRow(ctx, `SELECT id::text FROM workouts WHERE standard_key='system-morning-quick'`).Scan(&systemWorkout); err != nil {
+		t.Fatal(err)
+	}
+	duplicate, duplicateErr := svc.Duplicate(tenantCtx, "workouts", systemWorkout, coachA, "coach")
+	if duplicateErr != nil {
+		t.Fatalf("duplicate system workout: %v", duplicateErr)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM workout_exercises WHERE workout_id=$1`, duplicate)
+		_, _ = pool.Exec(ctx, `DELETE FROM workouts WHERE id=$1`, duplicate)
+	}()
+	var duplicateTenant, duplicateOwner, duplicateStatus string
+	if err = pool.QueryRow(ctx, `SELECT tenant_id::text,owner_user_id::text,status FROM workouts WHERE id=$1`, duplicate).Scan(&duplicateTenant, &duplicateOwner, &duplicateStatus); err != nil || duplicateTenant != tenantA || duplicateOwner != coachA || duplicateStatus != "draft" {
+		t.Fatalf("system duplicate ownership: tenant=%s owner=%s status=%s err=%v", duplicateTenant, duplicateOwner, duplicateStatus, err)
+	}
 	mediaBefore, _ := svc.ListMedia(tenantCtx, coachA, "coach")
 	for _, item := range mediaBefore {
 		if item.ID == mediaB {

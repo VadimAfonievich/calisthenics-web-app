@@ -81,6 +81,66 @@ func TestSuperAdminCoachRoleAuditPostgres(t *testing.T) {
 	}
 }
 
+func TestTenantAvatarIsolationAndFallbackPostgres(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	const coachA = "94600000-0000-0000-0000-000000000001"
+	const coachB = "94600000-0000-0000-0000-000000000002"
+	const tenantA = "94600000-0000-0000-0000-000000000011"
+	const tenantB = "94600000-0000-0000-0000-000000000012"
+	const mediaA = "94600000-0000-0000-0000-000000000021"
+	const mediaB = "94600000-0000-0000-0000-000000000022"
+	defer func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM media_assets WHERE id IN ($1,$2)`, mediaA, mediaB)
+		_, _ = pool.Exec(ctx, `DELETE FROM tenant_memberships WHERE tenant_id IN ($1,$2)`, tenantA, tenantB)
+		_, _ = pool.Exec(ctx, `DELETE FROM tenants WHERE id IN ($1,$2)`, tenantA, tenantB)
+		_, _ = pool.Exec(ctx, `DELETE FROM profiles WHERE user_id IN ($1,$2)`, coachA, coachB)
+		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id IN ($1,$2)`, coachA, coachB)
+	}()
+	for i, x := range []struct{ id, name, photo string }{{coachA, "Alpha Coach", "https://example.com/a.jpg"}, {coachB, "Beta Coach", "https://example.com/b.jpg"}} {
+		if _, err = pool.Exec(ctx, `INSERT INTO users(id,telegram_id,first_name,photo_url) VALUES($1,$2,$3,$4)`, x.id, 946000001+i, x.name, x.photo); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = pool.Exec(ctx, `INSERT INTO profiles(user_id,display_name) VALUES($1,$2)`, x.id, x.name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO tenants(id,slug,name,owner_user_id) VALUES($1,'avatar-a','Alpha Fitness',$3),($2,'avatar-b','Beta',$4)`, tenantA, tenantB, coachA, coachB); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO tenant_memberships(tenant_id,user_id,role) VALUES($1,$3,'coach'),($2,$4,'coach')`, tenantA, tenantB, coachA, coachB); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO media_assets(id,owner_user_id,tenant_id,type,storage_provider,storage_key,url,original_filename,mime_type,size_bytes) VALUES($5,$3,$1,'image','external','a','data:image/png;base64,AA==','a.png','image/png',1),($6,$4,$2,'image','external','b','data:image/png;base64,AA==','b.png','image/png',1)`, tenantA, tenantB, coachA, coachB, mediaA, mediaB); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(pool)
+	got, err := store.GetTenant(ctx, tenantA)
+	if err != nil || got.AvatarURL != "https://example.com/a.jpg" || got.AvatarInitials != "AF" {
+		t.Fatalf("fallback: %#v %v", got, err)
+	}
+	if _, err = store.UpdateOwnTenantAvatar(ctx, coachA, tenantA, func() *string { v := mediaB; return &v }()); err == nil {
+		t.Fatal("cross-tenant avatar accepted")
+	}
+	v := mediaA
+	got, err = store.UpdateOwnTenantAvatar(ctx, coachA, tenantA, &v)
+	if err != nil || got.AvatarURL != "data:image/png;base64,AA==" {
+		t.Fatalf("custom: %#v %v", got, err)
+	}
+	got, err = store.UpdateOwnTenantAvatar(ctx, coachA, tenantA, nil)
+	if err != nil || got.AvatarURL != "https://example.com/a.jpg" {
+		t.Fatalf("remove: %#v %v", got, err)
+	}
+}
+
 func TestCoachSpaceSettingsAndSlugSecurityPostgres(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
