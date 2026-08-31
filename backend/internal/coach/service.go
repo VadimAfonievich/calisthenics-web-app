@@ -166,17 +166,21 @@ type BuilderExercise struct {
 	SortOrder             int     `json:"sort_order"`
 }
 type BuilderLevel struct {
-	LevelNumber     int              `json:"level_number"`
-	Title           string           `json:"title"`
-	Description     string           `json:"description"`
-	Difficulty      string           `json:"difficulty"`
-	UnlockRuleType  string           `json:"unlock_rule_type"`
-	UnlockRuleValue int              `json:"unlock_rule_value"`
-	CriterionType   string           `json:"criterion_type"`
-	CriterionValue  int              `json:"criterion_value"`
-	ProgramLevelID  *string          `json:"program_level_id,omitempty"`
-	SortOrder       int              `json:"sort_order"`
-	Workouts        []ProgramWorkout `json:"workouts,omitempty"`
+	LevelNumber        int              `json:"level_number"`
+	Title              string           `json:"title"`
+	Description        string           `json:"description"`
+	Difficulty         string           `json:"difficulty"`
+	UnlockRuleType     string           `json:"unlock_rule_type"`
+	UnlockRuleValue    int              `json:"unlock_rule_value"`
+	CriterionType      string           `json:"criterion_type"`
+	CriterionValue     int              `json:"criterion_value"`
+	ProgramLevelID     *string          `json:"program_level_id,omitempty"`
+	SortOrder          int              `json:"sort_order"`
+	Workouts           []ProgramWorkout `json:"workouts,omitempty"`
+	MasteryType        string           `json:"mastery_type"`
+	MasteryValue       *int             `json:"mastery_value,omitempty"`
+	MasteryName        string           `json:"mastery_name"`
+	MasteryDescription string           `json:"mastery_description"`
 }
 type MediaInput struct {
 	Type             string  `json:"type"`
@@ -369,7 +373,9 @@ func (s *Service) Get(ctx context.Context, kind, id, user string, role Role) (ma
 	if kind == "exercises" {
 		condition = "tenant_id=$2::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)"
 	}
-	if kind == "workouts" { condition = "tenant_id=$2::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)" }
+	if kind == "workouts" {
+		condition = "tenant_id=$2::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)"
+	}
 	q := fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE id=$1::uuid AND (%s)", x.table, condition)
 	var raw []byte
 	if e := s.pool.QueryRow(ctx, q, id, tenant).Scan(&raw); errors.Is(e, pgx.ErrNoRows) {
@@ -504,7 +510,9 @@ func (s *Service) List(ctx context.Context, kind, user string, role Role, search
 	if kind == "exercises" {
 		where = " WHERE (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL))"
 	}
-	if kind == "workouts" { where = " WHERE (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL))" }
+	if kind == "workouts" {
+		where = " WHERE (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL))"
+	}
 	if search != "" {
 		args = append(args, "%"+search+"%")
 		where += fmt.Sprintf(" AND "+x.name+" ILIKE $%d", len(args))
@@ -642,15 +650,40 @@ func validProgramWorkouts(items []ProgramWorkout) bool {
 
 func normalizedProgramLevels(in BuilderInput) []BuilderLevel {
 	if len(in.Levels) > 0 {
-		return in.Levels
+		levels := in.Levels
+		for i := range levels {
+			if levels[i].MasteryType == "" {
+				levels[i].MasteryType = "manual"
+			}
+			if levels[i].MasteryName == "" {
+				levels[i].MasteryName = levels[i].Title
+			}
+			if levels[i].MasteryDescription == "" {
+				levels[i].MasteryDescription = "Подтвердите, что вы освоили навык этого этапа."
+			}
+			if levels[i].MasteryType == "manual" {
+				levels[i].MasteryValue = nil
+			}
+		}
+		return levels
 	}
-	return []BuilderLevel{{LevelNumber: 1, Title: "Тренировки", Description: "Этап программы", Difficulty: in.Difficulty, UnlockRuleType: "none", SortOrder: 0, Workouts: in.Workouts}}
+	return []BuilderLevel{{LevelNumber: 1, Title: "Тренировки", Description: "Этап программы", Difficulty: in.Difficulty, UnlockRuleType: "none", SortOrder: 0, Workouts: in.Workouts, MasteryType: "manual", MasteryName: "Цель этапа", MasteryDescription: "Подтвердите, что вы освоили навык этого этапа."}}
 }
 
 func validProgramLevels(levels []BuilderLevel) bool {
 	seenLevels, seenOrder, seenWorkouts := map[int]bool{}, map[int]bool{}, map[string]bool{}
-	for _, level := range levels {
-		if level.LevelNumber < 1 || level.SortOrder < 0 || seenLevels[level.LevelNumber] || seenOrder[level.SortOrder] || strings.TrimSpace(level.Title) == "" || strings.TrimSpace(level.Description) == "" || !oneOf(level.Difficulty, "beginner", "intermediate", "advanced") || !oneOf(level.UnlockRuleType, "none", "previous_level", "workouts_completed", "criterion") || level.UnlockRuleValue < 0 || !validProgramWorkouts(level.Workouts) {
+	for index := range levels {
+		level := levels[index]
+		if level.MasteryType == "" {
+			level.MasteryType = "manual"
+		}
+		if level.MasteryName == "" {
+			level.MasteryName = level.Title
+		}
+		if level.MasteryDescription == "" {
+			level.MasteryDescription = "Подтвердите, что вы освоили навык этого этапа."
+		}
+		if level.LevelNumber < 1 || level.SortOrder < 0 || seenLevels[level.LevelNumber] || seenOrder[level.SortOrder] || strings.TrimSpace(level.Title) == "" || strings.TrimSpace(level.Description) == "" || !oneOf(level.Difficulty, "beginner", "intermediate", "advanced") || !oneOf(level.MasteryType, "duration", "reps", "manual") || strings.TrimSpace(level.MasteryName) == "" || strings.TrimSpace(level.MasteryDescription) == "" || (level.MasteryType == "manual" && level.MasteryValue != nil) || (level.MasteryType != "manual" && (level.MasteryValue == nil || *level.MasteryValue < 1)) || !validProgramWorkouts(level.Workouts) {
 			return false
 		}
 		seenLevels[level.LevelNumber], seenOrder[level.SortOrder] = true, true
@@ -696,7 +729,7 @@ func validBuilderEnums(kind string, in BuilderInput) bool {
 		if level.LevelNumber < 1 || level.SortOrder < 0 || strings.TrimSpace(level.Title) == "" {
 			return false
 		}
-		if kind == "programs" && (!oneOf(level.Difficulty, "beginner", "intermediate", "advanced") || !oneOf(level.UnlockRuleType, "none", "previous_level", "workouts_completed", "criterion") || level.UnlockRuleValue < 0) {
+		if kind == "programs" && (!oneOf(level.Difficulty, "beginner", "intermediate", "advanced") || !oneOf(level.MasteryType, "duration", "reps", "manual") || strings.TrimSpace(level.MasteryName) == "" || strings.TrimSpace(level.MasteryDescription) == "" || (level.MasteryType == "manual" && level.MasteryValue != nil) || (level.MasteryType != "manual" && (level.MasteryValue == nil || *level.MasteryValue < 1))) {
 			return false
 		}
 		if kind == "skills" && (!oneOf(level.CriterionType, "workout_completed", "duration_seconds", "repetitions", "manual_confirmation", "workout_count", "exercise_reps", "exercise_duration", "skill_hold_duration", "manual_user_confirmation", "manual_coach_confirmation") || level.CriterionValue < 1 || (level.CriterionType == "workout_completed" && level.ProgramLevelID == nil)) {
@@ -732,6 +765,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			return "", err
 		}
 	}
+	if kind == "programs" {
+		in.Levels = normalizedProgramLevels(in)
+	}
 	if (kind != "workouts" && strings.TrimSpace(in.Description) == "") || !validBuilderEnums(kind, in) || !validOptionalID(in.CoverMediaID) || !validOptionalID(in.DemoMediaID) {
 		return "", ErrInvalid
 	}
@@ -765,7 +801,7 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,tags=$12,movement_type=$13,coach_tips=$14,cover_media_id=$15::uuid,demo_media_id=$16::uuid WHERE id=$1::uuid AND tenant_id=$2::uuid AND owner_user_id=$3::uuid RETURNING id::text`, *id, tenant, user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, in.MovementType, in.CoachTips, in.CoverMediaID, in.DemoMediaID).Scan(&out)
 		}
 	case "programs":
-		levels := normalizedProgramLevels(in)
+		levels := in.Levels
 		if in.Name == "" || in.DurationWeeks < 1 || !validProgramLevels(levels) {
 			return "", ErrInvalid
 		}
@@ -784,7 +820,7 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 				}
 				levelNumbers = append(levelNumbers, int32(level.LevelNumber))
 				var levelID string
-				e = tx.QueryRow(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(program_id,level_number) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,difficulty=EXCLUDED.difficulty,unlock_rule_type=EXCLUDED.unlock_rule_type,unlock_rule_value=EXCLUDED.unlock_rule_value,sort_order=EXCLUDED.sort_order RETURNING id::text`, out, level.LevelNumber, level.Title, level.Description, level.Difficulty, level.UnlockRuleType, level.UnlockRuleValue, level.SortOrder).Scan(&levelID)
+				e = tx.QueryRow(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order,mastery_type,mastery_value,mastery_name,mastery_description) VALUES($1::uuid,$2,$3,$4,$5,CASE WHEN $2=1 THEN 'none' ELSE 'previous_level' END,0,$6,$7,$8,$9,$10) ON CONFLICT(program_id,level_number) DO UPDATE SET title=EXCLUDED.title,description=EXCLUDED.description,difficulty=EXCLUDED.difficulty,unlock_rule_type=EXCLUDED.unlock_rule_type,unlock_rule_value=EXCLUDED.unlock_rule_value,sort_order=EXCLUDED.sort_order,mastery_type=EXCLUDED.mastery_type,mastery_value=EXCLUDED.mastery_value,mastery_name=EXCLUDED.mastery_name,mastery_description=EXCLUDED.mastery_description RETURNING id::text`, out, level.LevelNumber, level.Title, level.Description, level.Difficulty, level.SortOrder, level.MasteryType, level.MasteryValue, strings.TrimSpace(level.MasteryName), strings.TrimSpace(level.MasteryDescription)).Scan(&levelID)
 				for _, workout := range level.Workouts {
 					if e != nil {
 						break
@@ -1150,7 +1186,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		if e != nil {
 			return "", e
 		}
-		_, e = tx.Exec(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order) SELECT $1::uuid,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order FROM program_levels WHERE program_id=$2::uuid`, out, id)
+		_, e = tx.Exec(ctx, `INSERT INTO program_levels(program_id,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order,mastery_type,mastery_value,mastery_name,mastery_description) SELECT $1::uuid,level_number,title,description,difficulty,unlock_rule_type,unlock_rule_value,sort_order,mastery_type,mastery_value,mastery_name,mastery_description FROM program_levels WHERE program_id=$2::uuid`, out, id)
 		if e != nil {
 			return "", e
 		}

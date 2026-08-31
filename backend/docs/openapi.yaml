@@ -95,6 +95,16 @@ paths:
         '401': {description: Missing or invalid access token}
         '403': {description: Content access denied}
         '404': {description: Program not found}
+  /api/v1/programs/{id}/levels/{levelID}/mastery:
+    post:
+      summary: Idempotently confirm mastery of the current program stage and unlock the next stage
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: levelID, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Updated program mastery and progression state}
+        '409': {description: Stage is not current or is locked}
   /api/v1/super-admin/users:
     get:
       summary: Search users for role administration

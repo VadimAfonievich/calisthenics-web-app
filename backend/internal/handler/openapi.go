@@ -86,6 +86,11 @@ paths:
         '200': {description: Published program}
         '401': {description: Missing or invalid access token}
         '404': {description: Program not found}
+  /api/v1/programs/{id}/levels/{levelID}/mastery:
+    post:
+      summary: Idempotently confirm mastery of the current program stage and unlock the next stage
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Updated mastery state}, '409': {description: Stage locked}}
   /api/v1/workouts:
     get:
       summary: List workouts from published programs

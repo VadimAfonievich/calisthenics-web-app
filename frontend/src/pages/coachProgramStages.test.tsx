@@ -69,8 +69,8 @@ describe("Coach program stages", () => {
   it("creates the next stage locked by the previous stage", async () => {
     render(<MemoryRouter><Harness /></MemoryRouter>);
     await userEvent.click(screen.getByText("+ Добавить этап"));
-    const rules = screen.getAllByLabelText("Условие открытия") as HTMLSelectElement[];
+    const rules = screen.getAllByLabelText("Тип условия перехода") as HTMLSelectElement[];
     expect(rules).toHaveLength(2);
-    expect(rules[1].value).toBe("previous_level");
+    expect(rules[1].value).toBe("manual");
   });
 });

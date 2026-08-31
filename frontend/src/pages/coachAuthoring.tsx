@@ -896,6 +896,9 @@ const blankBuilder = (kind: ContentKind): BuilderInput => ({
           unlock_rule_value: 0,
           criterion_type: "workout_completed",
           criterion_value: 1,
+          mastery_type:"manual",
+          mastery_name:"Первый этап",
+          mastery_description:"Подтвердите, что вы освоили навык этого этапа.",
           sort_order: 0,
           workouts: [],
         }],
@@ -977,6 +980,7 @@ export function validateBuilder(
     )
   )
     return "Заполните название и описание каждого этапа программы.";
+  if(kind==="programs"&&value.levels?.some(level=>!level.mastery_name?.trim()||!level.mastery_description?.trim()||((level.mastery_type??"manual")!=="manual"&&(!level.mastery_value||level.mastery_value<1))))return "Заполните условие перехода: каждый этап программы должен иметь цель.";
   if (
     kind === "programs" &&
     publish &&
@@ -1069,6 +1073,10 @@ function BuilderEditor({
               unlock_rule_value: Number(x.unlock_rule_value ?? 0),
               criterion_type: String(x.criterion_type ?? "repetitions"),
               criterion_value: Number(x.criterion_value ?? 1),
+              mastery_type: String(x.mastery_type??"manual") as "duration"|"reps"|"manual",
+              ...(x.mastery_value?{mastery_value:Number(x.mastery_value)}:{}),
+              mastery_name:String(x.mastery_name??x.title??"Цель этапа"),
+              mastery_description:String(x.mastery_description??"Подтвердите, что вы освоили навык этого этапа."),
               ...(x.program_level_id
                 ? { program_level_id: String(x.program_level_id) }
                 : {}),
@@ -2017,35 +2025,41 @@ export function Stages({
                   <option value="advanced">Продвинутый</option>
                 </select>
               </label>
+              <div className="notice"><b>Условие перехода</b><br/>Тренировки этапа можно выполнять неограниченно. Следующий этап откроется после того, как ученик подтвердит выполнение цели этапа.</div>
               <label>
-                Условие открытия
+                Тип условия перехода
                 <select
-                  value={x.unlock_rule_type}
+                  value={x.mastery_type??"manual"}
                   onChange={(e) =>
                     change({
                       ...value,
                       levels: levels.map((v, j) =>
                         j === i
-                          ? { ...v, unlock_rule_type: e.target.value }
+                          ? { ...v, mastery_type: e.target.value as "duration"|"reps"|"manual", mastery_value:e.target.value==="manual"?undefined:(v.mastery_value??1) }
                           : v,
                       ),
                     })
                   }
                 >
-                  <option value="none">Доступен сразу</option>
-                  <option value="previous_level">Предыдущий этап</option>
-                  <option value="workouts_completed">
-                    Количество тренировок
-                  </option>
-                  <option value="criterion">По критерию</option>
+                  <option value="duration">Удержание по времени</option>
+                  <option value="reps">Количество повторений</option>
+                  <option value="manual">Подтверждение без значения</option>
                 </select>
               </label>
               <label>
-                Значение условия
+                Название навыка / цели
+                <input value={x.mastery_name??x.title} onChange={e=>change({...value,levels:levels.map((v,j)=>j===i?{...v,mastery_name:e.target.value}:v)})}/>
+              </label>
+              <label>
+                Описание критерия
+                <textarea value={x.mastery_description??"Подтвердите, что вы освоили навык этого этапа."} onChange={e=>change({...value,levels:levels.map((v,j)=>j===i?{...v,mastery_description:e.target.value}:v)})}/>
+              </label>
+              {(x.mastery_type??"manual")!=="manual"&&<label>
+                {(x.mastery_type??"manual")==="duration"?"Секунд":"Повторений"}
                 <input
                   type="number"
-                  min="0"
-                  value={x.unlock_rule_value ?? ""}
+                  min="1"
+                  value={x.mastery_value ?? ""}
                   onChange={(e) =>
                     change({
                       ...value,
@@ -2053,7 +2067,7 @@ export function Stages({
                         j === i
                           ? {
                               ...v,
-                              unlock_rule_value: numericValue(
+                              mastery_value: numericValue(
                                 e.target.value,
                               ) as number,
                             }
@@ -2062,7 +2076,7 @@ export function Stages({
                     })
                   }
                 />
-              </label>
+              </label>}
               <ProgramWorkouts
                 value={value}
                 change={change}
@@ -2193,6 +2207,9 @@ export function Stages({
                 criterion_type:
                   kind === "skills" ? "repetitions" : "workout_completed",
                 criterion_value: 1,
+                mastery_type:"manual",
+                mastery_name:`Этап ${levels.length+1}`,
+                mastery_description:"Подтвердите, что вы освоили навык этого этапа.",
                 sort_order:
                   Math.max(-1, ...levels.map((level) => level.sort_order)) + 1,
                 workouts: kind === "programs" ? [] : undefined,

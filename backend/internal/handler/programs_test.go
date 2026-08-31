@@ -27,6 +27,9 @@ func (s programStoreStub) Get(context.Context, string, string) (programs.Program
 func (s programStoreStub) Start(context.Context, string, string) (programs.Progress, error) {
 	return s.progress, s.err
 }
+func (s programStoreStub) ConfirmMastery(context.Context, string, string, string) (programs.MasteryResult, error) {
+	return programs.MasteryResult{}, s.err
+}
 func TestListProgramsContract(t *testing.T) {
 	store := programStoreStub{items: []programs.Program{{ID: "1", Name: "Published", Slug: "published", Difficulty: "beginner", DurationWeeks: 4}}}
 	w := httptest.NewRecorder()

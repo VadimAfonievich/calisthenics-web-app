@@ -35,6 +35,11 @@ export type ProgramLevel = {
   unlock_rule_value: number;
   workouts: ProgramWorkout[];
   status?: "completed" | "current" | "locked";
+  mastery_type?:"duration"|"reps"|"manual";
+  mastery_value?:number;
+  mastery_name?:string;
+  mastery_description?:string;
+  mastered_at?:string;
 };
 export const listPrograms = (token: string) =>
   api<{ programs: Program[] }>("/programs", {}, token);
@@ -50,3 +55,4 @@ export const startProgram = (token: string, id: string) =>
     { method: "POST" },
     token,
   );
+export const confirmStageMastery=(token:string,programID:string,levelID:string)=>api<{mastery:{program_id:string;program_level_id:string;status:string;current_level:number;mastered_at:string;program_completed:boolean}}>(`/programs/${requireEntityID(programID,"Program")}/levels/${requireEntityID(levelID,"Program level")}/mastery`,{method:"POST"},token)

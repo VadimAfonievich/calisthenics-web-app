@@ -68,6 +68,10 @@ export type BuilderLevel = {
   program_level_id?: string;
   sort_order: number;
   workouts?: ProgramWorkout[];
+  mastery_type?: "duration"|"reps"|"manual";
+  mastery_value?: number;
+  mastery_name?: string;
+  mastery_description?: string;
 };
 export type BuilderInput = {
   name?: string;

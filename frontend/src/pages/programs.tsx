@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {useState} from "react";
 import { Link, useParams } from "react-router-dom";
-import { getProgram, listPrograms, startProgram } from "../api/programs";
+import { confirmStageMastery,getProgram, listPrograms, startProgram } from "../api/programs";
 import { isValidEntityID } from "../api/entityIds";
 import { useSessionStore } from "../store/session";
 const difficulty: Record<string, string> = {
@@ -45,7 +46,9 @@ export function ProgramDetailPage() {
       queryFn: () => getProgram(token!, id),
       enabled: !!token && valid,
     });
+  const [confirmLevel,setConfirmLevel]=useState<string>();
   const start = useMutation({mutationFn:()=>startProgram(token!,id),onSuccess:()=>{client.invalidateQueries({queryKey:["program",id]});client.invalidateQueries({queryKey:["home-programs"]})}});
+  const mastery=useMutation({mutationFn:(levelID:string)=>confirmStageMastery(token!,id,levelID),onSuccess:()=>{setConfirmLevel(undefined);client.invalidateQueries({queryKey:["program",id]});client.invalidateQueries({queryKey:["home-programs"]})}})
   if (!valid) return <p className="notice error">Некорректная программа.</p>;
   if (q.isLoading)
     return <p className="notice skeleton">Загружаем программу…</p>;
@@ -62,6 +65,7 @@ export function ProgramDetailPage() {
         difficulty: p.difficulty,
         unlock_rule_type: "none",
         unlock_rule_value: 0,
+        mastery_type:"manual" as const,mastery_name:"Цель этапа",mastery_description:"Подтвердите, что вы освоили навык этого этапа.",
         workouts: p.workouts ?? [],
       }];
   return (
@@ -87,6 +91,8 @@ export function ProgramDetailPage() {
             <p>{level.description}</p>
             {level.status&&<b>{level.status==="completed"?"✓ Завершён":level.status==="current"?"→ Текущий этап":"🔒 Закрыт"}</b>}
           </header>
+          <div className="stage-goal"><p className="eyebrow">ЦЕЛЬ ЭТАПА</p><h4>{level.mastery_name||level.title}</h4><p>{level.mastery_description||"Подтвердите, что вы освоили навык этого этапа."}</p>{level.mastery_type!=="manual"&&level.mastery_value&&<b>{level.mastery_value} {level.mastery_type==="duration"?"сек":"повторений"}</b>}<span>{level.mastered_at?"✓ Навык освоен":"Ещё не подтверждено"}</span></div>
+          <p className="eyebrow">ТРЕНИРОВКИ ЭТАПА · {level.workouts.length} ДОСТУПНО</p>
           {level.workouts.map((w, workoutIndex) => (
             <Link className="workout-card" to={level.status==="locked"?"#":`/workouts/${w.id}`} aria-disabled={level.status==="locked"} key={w.id}>
               <p className="eyebrow">
@@ -94,11 +100,13 @@ export function ProgramDetailPage() {
               </p>
               <h3>{w.title}</h3>
               <p>{w.description}</p>
-              <footer><span>{w.estimated_minutes} мин</span></footer>
+              <footer><span>{w.estimated_minutes} мин</span>{level.status!=="locked"&&<b>Повторить тренировку</b>}</footer>
             </Link>
           ))}
+          {level.status==="current"&&<section className="stage-mastery-action"><p className="eyebrow">ГОТОВ ПЕРЕЙТИ ДАЛЬШЕ?</p><p>Если ты уже выполняешь цель этапа, подтверди освоение навыка.</p><button type="button" onClick={()=>setConfirmLevel(level.id)}>Подтвердить навык</button></section>}
         </section>
       ))}
+      {confirmLevel&&(()=>{const level=levels.find(x=>x.id===confirmLevel)!;return <div className="modal-backdrop" role="presentation"><section className="card confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mastery-confirm-title"><h3 id="mastery-confirm-title">Ты действительно освоил этот этап?</h3><p><b>Цель:</b><br/>{level.mastery_description}</p><p>После подтверждения откроется следующий этап.</p>{mastery.isError&&<p className="field-error">Не удалось подтвердить навык. Обновите страницу и попробуйте снова.</p>}<div className="form-actions"><button className="secondary-button" onClick={()=>setConfirmLevel(undefined)}>Пока нет</button><button disabled={mastery.isPending} onClick={()=>mastery.mutate(level.id)}>Да, навык освоен</button></div></section></div>})()}
     </div>
   );
 }

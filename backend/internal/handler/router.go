@@ -71,6 +71,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Get("/programs", listPrograms(dependencies.Programs))
 			protected.Get("/programs/{id}", getProgram(dependencies.Programs))
 			protected.Post("/programs/{id}/start", startProgram(dependencies.Programs))
+			protected.Post("/programs/{id}/levels/{levelID}/mastery", confirmProgramStageMastery(dependencies.Programs))
 			protected.Get("/super-admin/users", superAdminUsers(dependencies.Auth.Users))
 			protected.Put("/super-admin/users/{id}/role", superAdminUserRole(dependencies.Auth.Users))
 			protected.Get("/super-admin/tenants", adminTenants(dependencies.Auth.Users))
