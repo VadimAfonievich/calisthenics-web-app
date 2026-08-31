@@ -5,7 +5,7 @@ import { runHealthProbe, safeNetworkError } from '../api/networkDiagnostics'
 import type { TelegramDiagnostics } from '../telegram/webapp'
 type SessionStatus = 'loading' | 'authenticated' | 'demo' | 'error'
 export type RuntimeDiagnostics = TelegramDiagnostics & { apiBaseConfigured: boolean; apiBaseURL: string; authRequestURL: string; authRequestMethod: 'POST'; authStarted: boolean; authCompleted: boolean; authHTTPStatus?: number; authError?: string; healthProbeURL: string; healthProbeStarted: boolean; healthProbeCompleted: boolean; healthProbeHTTPStatus?: number; healthProbeError?: string }
-type SessionState = { status: SessionStatus; accessToken?: string; user?: CurrentUser; appMode: AppMode; error?: string; diagnostics: RuntimeDiagnostics; bootstrap: (initData: string) => Promise<void>; setAppMode: (mode: AppMode) => boolean; selectTenant:(slug:string)=>boolean; probeHealth: () => Promise<void>; setTelegramDiagnostics: (diagnostics: TelegramDiagnostics) => void; failInitialization: (error: unknown) => void; signOut: () => void }
+type SessionState = { status: SessionStatus; accessToken?: string; user?: CurrentUser; appMode: AppMode; error?: string; diagnostics: RuntimeDiagnostics; bootstrap: (initData: string) => Promise<void>; setAppMode: (mode: AppMode) => boolean; selectTenant:(slug:string)=>boolean; updateCurrentTenant:(tenant:NonNullable<CurrentUser['current_tenant']>)=>void; probeHealth: () => Promise<void>; setTelegramDiagnostics: (diagnostics: TelegramDiagnostics) => void; failInitialization: (error: unknown) => void; signOut: () => void }
 export const APP_MODE_KEY = 'calisthenics_app_mode'
 export const resolveAppMode = (user: CurrentUser, saved: string | null): AppMode => saved === 'admin' && user.available_modes.includes('admin') ? 'admin' : saved === 'coach' && user.available_modes.includes('coach') ? 'coach' : 'student'
 const demoUser: CurrentUser = { id: 'demo', first_name: 'Гость', display_name: 'Гость', level: 1, xp: 0, current_streak: 0, timezone: 'UTC', role: 'user', available_modes: ['student'] }
@@ -36,5 +36,6 @@ export const useSessionStore = create<SessionState>((set) => ({
   },
   setAppMode(mode) { let allowed=false; set((state) => { allowed=Boolean(state.user?.available_modes.includes(mode)); if (!allowed) return state; localStorage.setItem(APP_MODE_KEY, mode); return { appMode: mode } }); return allowed },
   selectTenant(slug){let selected=false;set(state=>{const tenant=state.user?.tenants?.find(x=>x.slug===slug);if(!tenant||!state.user)return state;selected=true;localStorage.setItem('calisthenics_tenant_slug',slug);return{user:{...state.user,current_tenant:tenant}}});return selected},
+  updateCurrentTenant(tenant){localStorage.setItem('calisthenics_tenant_slug',tenant.slug);set(state=>state.user?{user:{...state.user,current_tenant:tenant,tenants:state.user.tenants?.map(item=>item.id===tenant.id?tenant:item)}}:state)},
   signOut() { sessionStorage.removeItem('access_token'); localStorage.setItem(APP_MODE_KEY, 'student'); set({ status: 'demo', accessToken: undefined, user: demoUser, appMode: 'student', error: undefined }) },
 }))

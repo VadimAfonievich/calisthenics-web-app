@@ -56,6 +56,25 @@ func AvailableModes(role string) []string {
 
 type Store struct{ pool *pgxpool.Pool }
 
+var tenantSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+var reservedTenantSlugs = map[string]bool{"admin": true, "api": true, "app": true, "coach": true, "root": true, "start": true, "support": true, "system": true}
+
+func validateTenantSlug(slug string) error {
+	if len(slug) < 2 || len(slug) > 63 || !tenantSlugPattern.MatchString(slug) {
+		return fmt.Errorf("invalid tenant slug")
+	}
+	if reservedTenantSlugs[slug] {
+		return fmt.Errorf("reserved tenant slug")
+	}
+	return nil
+}
+
+func normalizeTenantSlug(value string) string {
+	value = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(value, "@")))
+	value = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(value, "-")
+	return strings.Trim(value, "-")
+}
+
 type RoleUser struct {
 	ID          string `json:"id"`
 	TelegramID  int64  `json:"telegram_id"`
@@ -101,12 +120,12 @@ FROM users u JOIN profiles p ON p.user_id = u.id LEFT JOIN admin_users a ON a.us
 	if err != nil {
 		return User{}, err
 	}
-	rows, tenantErr := s.pool.Query(ctx, `SELECT t.id::text,t.slug,t.name,m.role FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY t.name`, id)
+	rows, tenantErr := s.pool.Query(ctx, `SELECT t.id::text,t.slug,t.name,m.role,t.description FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY t.name`, id)
 	if tenantErr == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var t Tenant
-			if err = rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Role); err != nil {
+			if err = rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Role, &t.Description); err != nil {
 				return User{}, err
 			}
 			user.Tenants = append(user.Tenants, t)
@@ -144,7 +163,7 @@ func (s *Store) BootstrapTenant(ctx context.Context, userID, slug string) (*Tena
 	defer tx.Rollback(ctx)
 	var t Tenant
 	if slug != "" {
-		err = tx.QueryRow(ctx, `SELECT id::text,slug,name FROM tenants WHERE slug=$1 AND status='active'`, slug).Scan(&t.ID, &t.Slug, &t.Name)
+		err = tx.QueryRow(ctx, `SELECT id::text,slug,name,description FROM tenants WHERE slug=$1 AND status='active'`, slug).Scan(&t.ID, &t.Slug, &t.Name, &t.Description)
 		if err != nil {
 			return nil, err
 		}
@@ -153,7 +172,7 @@ func (s *Store) BootstrapTenant(ctx context.Context, userID, slug string) (*Tena
 			return nil, err
 		}
 	} else {
-		err = tx.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY m.updated_at DESC LIMIT 1`, userID).Scan(&t.ID, &t.Slug, &t.Name)
+		err = tx.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,t.description FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND m.status='active' AND t.status='active' ORDER BY m.updated_at DESC LIMIT 1`, userID).Scan(&t.ID, &t.Slug, &t.Name, &t.Description)
 		if err != nil {
 			return nil, nil
 		}
@@ -174,7 +193,7 @@ func (s *Store) ResolveTenant(ctx context.Context, userID, slug string) (*Tenant
 		return nil, nil
 	}
 	var t Tenant
-	err := s.pool.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,m.role FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND t.slug=$2 AND m.status='active' AND t.status='active'`, userID, slug).Scan(&t.ID, &t.Slug, &t.Name, &t.Role)
+	err := s.pool.QueryRow(ctx, `SELECT t.id::text,t.slug,t.name,m.role,t.description FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND t.slug=$2 AND m.status='active' AND t.status='active'`, userID, slug).Scan(&t.ID, &t.Slug, &t.Name, &t.Role, &t.Description)
 	if err != nil {
 		return nil, err
 	}
@@ -209,6 +228,24 @@ func (s *Store) UpdateOwnTenant(ctx context.Context, user, tenant, name, descrip
 	tag, e := s.pool.Exec(ctx, `UPDATE tenants t SET name=$3,description=$4 WHERE id=$2::uuid AND owner_user_id=$1::uuid AND EXISTS(SELECT 1 FROM tenant_memberships m WHERE m.tenant_id=t.id AND m.user_id=$1::uuid AND m.role='coach' AND m.status='active')`, user, tenant, strings.TrimSpace(name), strings.TrimSpace(description))
 	if e != nil {
 		return Tenant{}, e
+	}
+	if tag.RowsAffected() == 0 {
+		return Tenant{}, fmt.Errorf("tenant forbidden")
+	}
+	return s.GetTenant(ctx, tenant)
+}
+
+func (s *Store) UpdateOwnTenantSlug(ctx context.Context, user, tenant, slug string) (Tenant, error) {
+	slug = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(slug, "@")))
+	if err := validateTenantSlug(slug); err != nil {
+		return Tenant{}, err
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE tenants t SET slug=$3,updated_at=NOW() WHERE id=$2::uuid AND owner_user_id=$1::uuid AND EXISTS(SELECT 1 FROM tenant_memberships m WHERE m.tenant_id=t.id AND m.user_id=$1::uuid AND m.role='coach' AND m.status='active')`, user, tenant, slug)
+	if err != nil {
+		if strings.Contains(err.Error(), "tenants_slug_key") || strings.Contains(err.Error(), "duplicate key") {
+			return Tenant{}, fmt.Errorf("tenant slug already exists")
+		}
+		return Tenant{}, err
 	}
 	if tag.RowsAffected() == 0 {
 		return Tenant{}, fmt.Errorf("tenant forbidden")
@@ -263,17 +300,34 @@ func (s *Store) SetCoachSpace(ctx context.Context, actor, target, role, name, sl
 			}
 		}
 		if slug == "" {
-			slug = "coach-" + strings.ReplaceAll(target, "-", "")
+			var existingSlug string
+			if existingErr := tx.QueryRow(ctx, `SELECT slug FROM tenants WHERE owner_user_id=$1::uuid AND status='active'`, target).Scan(&existingSlug); existingErr == nil {
+				slug = existingSlug // never rename an existing space implicitly
+			} else {
+				var username string
+				_ = tx.QueryRow(ctx, `SELECT COALESCE(username,'') FROM users WHERE id=$1::uuid`, target).Scan(&username)
+				candidates := []string{normalizeTenantSlug(username), normalizeTenantSlug(name), "coach-" + strings.ReplaceAll(target, "-", "")}
+				for _, candidate := range candidates {
+					if validateTenantSlug(candidate) != nil {
+						continue
+					}
+					var available bool
+					if queryErr := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM tenants WHERE slug=$1)`, candidate).Scan(&available); queryErr == nil && available {
+						slug = candidate
+						break
+					}
+				}
+			}
 		}
-		if !regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`).MatchString(slug) || len(slug) < 2 || len(slug) > 63 {
-			return fmt.Errorf("invalid tenant slug")
-		}
-		reserved := map[string]bool{"admin": true, "api": true, "app": true, "coach": true, "root": true, "start": true, "support": true, "system": true}
-		if reserved[slug] {
-			return fmt.Errorf("reserved tenant slug")
+		slug = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(slug, "@")))
+		if validationErr := validateTenantSlug(slug); validationErr != nil {
+			return validationErr
 		}
 		var tenantID string
 		err = tx.QueryRow(ctx, `INSERT INTO tenants(name,slug,owner_user_id) VALUES($1,$2,$3::uuid) ON CONFLICT(owner_user_id) WHERE status='active' DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,updated_at=NOW() RETURNING id::text`, name, slug, target).Scan(&tenantID)
+		if err != nil && (strings.Contains(err.Error(), "tenants_slug_key") || strings.Contains(err.Error(), "duplicate key")) {
+			return fmt.Errorf("tenant slug already exists")
+		}
 		if err == nil {
 			_, err = tx.Exec(ctx, `INSERT INTO tenant_memberships(tenant_id,user_id,role,status) VALUES($1::uuid,$2::uuid,'coach','active') ON CONFLICT(tenant_id,user_id) DO UPDATE SET role='coach',status='active',updated_at=NOW()`, tenantID, target)
 		}

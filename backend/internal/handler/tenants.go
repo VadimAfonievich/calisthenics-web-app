@@ -14,6 +14,34 @@ type tenantAdminStore interface {
 	GetTenant(context.Context, string) (users.Tenant, error)
 	UpdateOwnTenant(context.Context, string, string, string, string) (users.Tenant, error)
 }
+type tenantSlugStore interface {
+	UpdateOwnTenantSlug(context.Context, string, string, string) (users.Tenant, error)
+}
+
+func coachSpaceSlug(store UserStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s, ok := store.(tenantSlugStore)
+		user, _ := middleware.UserID(r.Context())
+		tenant, hasTenant := middleware.TenantID(r.Context())
+		role, _ := middleware.TenantRole(r.Context())
+		if !ok || !hasTenant || role != "coach" {
+			writeError(w, 403, "COACH_TENANT_REQUIRED", "Coach tenant required")
+			return
+		}
+		var body struct {
+			Slug string `json:"slug"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		x, err := s.UpdateOwnTenantSlug(r.Context(), user, tenant, body.Slug)
+		if err != nil {
+			writeError(w, 409, "TENANT_SLUG_REJECTED", err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"tenant": x})
+	}
+}
 
 func adminTenants(store UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

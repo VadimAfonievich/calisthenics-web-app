@@ -6,4 +6,5 @@ export const tenantShareLink=(slug:string)=>`https://t.me/${botUsername}?startap
 export const listTenants=(token:string)=>api<{tenants:Tenant[]}>('/super-admin/tenants',{},token)
 export const getCoachSpace=(token:string)=>api<{tenant:Tenant}>('/coach/space',{},token)
 export const updateCoachSpace=(token:string,input:{name:string;description:string})=>api<{tenant:Tenant}>('/coach/space',{method:'PUT',body:JSON.stringify(input)},token)
+export const updateCoachSpaceSlug=(token:string,slug:string)=>api<{tenant:Tenant}>('/coach/space/slug',{method:'PUT',body:JSON.stringify({slug})},token)
 export async function copyShareLink(slug:string){const value=tenantShareLink(slug);if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(value);return}const area=document.createElement('textarea');area.value=value;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove()}

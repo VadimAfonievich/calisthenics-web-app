@@ -118,13 +118,28 @@ func TestSignedTelegramTenantBootstrapPostgres(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id JOIN users u ON u.id=m.user_id WHERE u.telegram_id=$1 AND t.slug='tenant-a'`, telegramID).Scan(&memberships); err != nil || memberships != 1 {
 		t.Fatalf("query bootstrap changed membership: %d %v", memberships, err)
 	}
+	if _, err = pool.Exec(ctx, `INSERT INTO tenant_memberships(tenant_id,user_id,role) VALUES($1,$2,'coach')`, tenantA, ownerA); err != nil {
+		t.Fatal(err)
+	}
+	store := users.NewStore(pool)
+	if _, err = store.UpdateOwnTenantSlug(ctx, ownerA, tenantA, "tenant-a-new"); err != nil {
+		t.Fatal(err)
+	}
+	code, _ = request(signedTenantInitData(botToken, "tenant-a", telegramID), "")
+	if code != http.StatusNotFound {
+		t.Fatalf("old signed start_param code=%d want=404", code)
+	}
+	code, response := request(signedTenantInitData(botToken, "tenant-a-new", telegramID), "")
+	if code != http.StatusOK || response["user"].(map[string]any)["current_tenant"].(map[string]any)["slug"] != "tenant-a-new" {
+		t.Fatalf("new signed start_param: code=%d body=%v", code, response)
+	}
 	for _, slug := range []string{"missing-tenant", "tenant-off"} {
 		code, _ = request(signedTenantInitData(botToken, slug, telegramID), "")
 		if code != http.StatusNotFound {
 			t.Fatalf("%s code=%d want=404", slug, code)
 		}
 	}
-	code, _ = request(signedTenantInitData("wrong-token", "tenant-a", telegramID), "")
+	code, _ = request(signedTenantInitData("wrong-token", "tenant-a-new", telegramID), "")
 	if code != http.StatusUnauthorized {
 		t.Fatalf("invalid signature code=%d want=401", code)
 	}

@@ -65,8 +65,8 @@ func superAdminUserRole(store UserStore) http.HandlerFunc {
 		}
 		body.Name = strings.TrimSpace(body.Name)
 		body.Slug = strings.TrimSpace(body.Slug)
-		if body.Role == "coach" && (body.Name == "" || body.Slug == "") {
-			writeError(w, 400, "TENANT_DETAILS_REQUIRED", "Tenant name and slug are required")
+		if body.Role == "coach" && body.Name == "" {
+			writeError(w, 400, "TENANT_DETAILS_REQUIRED", "Tenant name is required")
 			return
 		}
 		if spaces, ok := store.(coachSpaceStore); ok {
