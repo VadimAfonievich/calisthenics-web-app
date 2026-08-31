@@ -22,9 +22,12 @@ func TestSuperAdminCoachRoleAuditPostgres(t *testing.T) {
 	const actor = "94000000-0000-0000-0000-000000000001"
 	const target = "94000000-0000-0000-0000-000000000002"
 	defer func() {
-		for _, q := range []string{`DELETE FROM role_change_audit WHERE actor_user_id=$1`, `DELETE FROM admin_users WHERE user_id IN ($1,$2)`, `DELETE FROM profiles WHERE user_id IN ($1,$2)`, `DELETE FROM users WHERE id IN ($1,$2)`} {
-			_, _ = pool.Exec(ctx, q, actor, target)
-		}
+		_, _ = pool.Exec(ctx, `DELETE FROM role_change_audit WHERE actor_user_id=$1`, actor)
+		_, _ = pool.Exec(ctx, `DELETE FROM tenant_memberships WHERE user_id IN ($1,$2)`, actor, target)
+		_, _ = pool.Exec(ctx, `DELETE FROM tenants WHERE owner_user_id=$1`, target)
+		_, _ = pool.Exec(ctx, `DELETE FROM admin_users WHERE user_id IN ($1,$2)`, actor, target)
+		_, _ = pool.Exec(ctx, `DELETE FROM profiles WHERE user_id IN ($1,$2)`, actor, target)
+		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id IN ($1,$2)`, actor, target)
 	}()
 	for i, id := range []string{actor, target} {
 		if _, err = pool.Exec(ctx, `INSERT INTO users(id,telegram_id,first_name) VALUES($1,$2,'Role test')`, id, 940000001+i); err != nil {
@@ -41,12 +44,18 @@ func TestSuperAdminCoachRoleAuditPostgres(t *testing.T) {
 	if err = store.SetCoachRole(ctx, actor, target, "coach"); err != nil {
 		t.Fatal(err)
 	}
+	if err = store.SetCoachRole(ctx, actor, target, "coach"); err != nil {
+		t.Fatalf("repeated promotion must be idempotent: %v", err)
+	}
 	user, err := store.GetByID(ctx, target)
-	if err != nil || user.Role != "coach" {
+	if err != nil || user.Role != "user" || len(user.Tenants) != 1 || user.Tenants[0].Role != "coach" {
 		t.Fatalf("promote: %+v %v", user, err)
 	}
 	if err = store.SetCoachRole(ctx, actor, target, "user"); err != nil {
 		t.Fatal(err)
+	}
+	if err = store.SetCoachRole(ctx, actor, target, "user"); err != nil {
+		t.Fatalf("repeated demotion must be idempotent: %v", err)
 	}
 	user, err = store.GetByID(ctx, target)
 	if err != nil || user.Role != "user" {
@@ -56,7 +65,11 @@ func TestSuperAdminCoachRoleAuditPostgres(t *testing.T) {
 		t.Fatal("self role mutation must be rejected")
 	}
 	var audits int
-	if err = pool.QueryRow(ctx, `SELECT count(*) FROM role_change_audit WHERE actor_user_id=$1 AND target_user_id=$2`, actor, target).Scan(&audits); err != nil || audits != 2 {
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM role_change_audit WHERE actor_user_id=$1 AND target_user_id=$2`, actor, target).Scan(&audits); err != nil || audits != 4 {
 		t.Fatalf("audit rows=%d err=%v", audits, err)
+	}
+	var tenants, activeCoaches int
+	if err = pool.QueryRow(ctx, `SELECT count(*),(SELECT count(*) FROM tenant_memberships WHERE user_id=$1 AND role='coach' AND status='active') FROM tenants WHERE owner_user_id=$1`, target).Scan(&tenants, &activeCoaches); err != nil || tenants != 1 || activeCoaches != 0 {
+		t.Fatalf("demotion preservation: tenants=%d active_coaches=%d err=%v", tenants, activeCoaches, err)
 	}
 }

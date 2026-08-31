@@ -5,9 +5,9 @@ import { runHealthProbe, safeNetworkError } from '../api/networkDiagnostics'
 import type { TelegramDiagnostics } from '../telegram/webapp'
 type SessionStatus = 'loading' | 'authenticated' | 'demo' | 'error'
 export type RuntimeDiagnostics = TelegramDiagnostics & { apiBaseConfigured: boolean; apiBaseURL: string; authRequestURL: string; authRequestMethod: 'POST'; authStarted: boolean; authCompleted: boolean; authHTTPStatus?: number; authError?: string; healthProbeURL: string; healthProbeStarted: boolean; healthProbeCompleted: boolean; healthProbeHTTPStatus?: number; healthProbeError?: string }
-type SessionState = { status: SessionStatus; accessToken?: string; user?: CurrentUser; appMode: AppMode; error?: string; diagnostics: RuntimeDiagnostics; bootstrap: (initData: string) => Promise<void>; setAppMode: (mode: AppMode) => boolean; probeHealth: () => Promise<void>; setTelegramDiagnostics: (diagnostics: TelegramDiagnostics) => void; failInitialization: (error: unknown) => void; signOut: () => void }
+type SessionState = { status: SessionStatus; accessToken?: string; user?: CurrentUser; appMode: AppMode; error?: string; diagnostics: RuntimeDiagnostics; bootstrap: (initData: string) => Promise<void>; setAppMode: (mode: AppMode) => boolean; selectTenant:(slug:string)=>boolean; probeHealth: () => Promise<void>; setTelegramDiagnostics: (diagnostics: TelegramDiagnostics) => void; failInitialization: (error: unknown) => void; signOut: () => void }
 export const APP_MODE_KEY = 'calisthenics_app_mode'
-export const resolveAppMode = (user: CurrentUser, saved: string | null): AppMode => saved === 'coach' && user.available_modes.includes('coach') ? 'coach' : 'student'
+export const resolveAppMode = (user: CurrentUser, saved: string | null): AppMode => saved === 'admin' && user.available_modes.includes('admin') ? 'admin' : saved === 'coach' && user.available_modes.includes('coach') ? 'coach' : 'student'
 const demoUser: CurrentUser = { id: 'demo', first_name: 'Гость', display_name: 'Гость', level: 1, xp: 0, current_streak: 0, timezone: 'UTC', role: 'user', available_modes: ['student'] }
 const initialDiagnostics: RuntimeDiagnostics = { sdkLoaded: false, webAppDetected: false, initDataPresent: false, initDataLength: 0, apiBaseConfigured: isAPIBaseConfigured, apiBaseURL, authRequestURL, authRequestMethod: 'POST', authStarted: false, authCompleted: false, healthProbeURL, healthProbeStarted: false, healthProbeCompleted: false }
 export const useSessionStore = create<SessionState>((set) => ({
@@ -27,6 +27,7 @@ export const useSessionStore = create<SessionState>((set) => ({
     try {
       const session = await authenticateTelegram(initData)
       sessionStorage.setItem('access_token', session.access_token)
+	  if(session.user.current_tenant)localStorage.setItem('calisthenics_tenant_slug',session.user.current_tenant.slug)
       const appMode = resolveAppMode(session.user, localStorage.getItem(APP_MODE_KEY)); localStorage.setItem(APP_MODE_KEY, appMode)
       set((state) => ({ status: 'authenticated', accessToken: session.access_token, user: session.user, appMode, diagnostics: { ...state.diagnostics, authCompleted: true, authHTTPStatus: 200 } }))
     } catch (error) {
@@ -34,5 +35,6 @@ export const useSessionStore = create<SessionState>((set) => ({
     }
   },
   setAppMode(mode) { let allowed=false; set((state) => { allowed=Boolean(state.user?.available_modes.includes(mode)); if (!allowed) return state; localStorage.setItem(APP_MODE_KEY, mode); return { appMode: mode } }); return allowed },
+  selectTenant(slug){let selected=false;set(state=>{const tenant=state.user?.tenants?.find(x=>x.slug===slug);if(!tenant||!state.user)return state;selected=true;localStorage.setItem('calisthenics_tenant_slug',slug);return{user:{...state.user,current_tenant:tenant}}});return selected},
   signOut() { sessionStorage.removeItem('access_token'); localStorage.setItem(APP_MODE_KEY, 'student'); set({ status: 'demo', accessToken: undefined, user: demoUser, appMode: 'student', error: undefined }) },
 }))

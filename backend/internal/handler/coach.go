@@ -14,7 +14,7 @@ import (
 type CoachStore interface {
 	Role(context.Context, string) (coachsvc.Role, error)
 	Dashboard(context.Context, string, coachsvc.Role) (coachsvc.Dashboard, error)
-	Analytics(context.Context) (coachsvc.Analytics, error)
+	Analytics(context.Context, string) (coachsvc.Analytics, error)
 	List(context.Context, string, string, coachsvc.Role, string, string) ([]coachsvc.Item, error)
 	Get(context.Context, string, string, string, coachsvc.Role) (map[string]any, error)
 	Options(context.Context, string, coachsvc.Role) (coachsvc.Options, error)
@@ -93,7 +93,8 @@ func coachDashboard(s CoachStore) http.HandlerFunc {
 }
 func coachAnalytics(s CoachStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		x, e := s.Analytics(r.Context())
+		u, _ := coachIdentity(r)
+		x, e := s.Analytics(r.Context(), u)
 		if e != nil {
 			coachErr(w, e)
 			return

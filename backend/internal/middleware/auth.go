@@ -12,6 +12,9 @@ import (
 type contextKey string
 
 const userIDKey contextKey = "user_id"
+const tenantIDKey contextKey = "tenant_id"
+const tenantRoleKey contextKey = "tenant_role"
+const platformRoleKey contextKey = "platform_role"
 
 func RequireAuth(secret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -33,6 +36,25 @@ func RequireAuth(secret string, next http.Handler) http.Handler {
 func UserID(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(userIDKey).(string)
 	return id, ok
+}
+
+func WithTenant(ctx context.Context, id, role string) context.Context {
+	return context.WithValue(context.WithValue(ctx, tenantIDKey, id), tenantRoleKey, role)
+}
+func TenantID(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(tenantIDKey).(string)
+	return id, ok
+}
+func TenantRole(ctx context.Context) (string, bool) {
+	role, ok := ctx.Value(tenantRoleKey).(string)
+	return role, ok
+}
+func WithPlatformRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, platformRoleKey, role)
+}
+func PlatformRole(ctx context.Context) (string, bool) {
+	role, ok := ctx.Value(platformRoleKey).(string)
+	return role, ok
 }
 
 func unauthorized(writer http.ResponseWriter) {

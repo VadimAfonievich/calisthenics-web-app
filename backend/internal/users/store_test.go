@@ -14,7 +14,7 @@ func TestAvailableModes(t *testing.T) {
 		{"", []string{"student"}},
 		{"coach", []string{"student", "coach"}},
 		{"admin", []string{"student", "coach"}},
-		{"super_admin", []string{"student", "coach"}},
+		{"super_admin", []string{"student", "coach", "admin"}},
 	}
 	for _, tt := range tests {
 		if got := AvailableModes(tt.role); !reflect.DeepEqual(got, tt.want) {

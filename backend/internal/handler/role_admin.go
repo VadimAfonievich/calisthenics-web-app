@@ -15,6 +15,9 @@ type roleUserStore interface {
 	SetCoachRole(context.Context, string, string, string) error
 	GetByID(context.Context, string) (users.User, error)
 }
+type coachSpaceStore interface {
+	SetCoachSpace(context.Context, string, string, string, string, string) error
+}
 
 func superAdminUsers(store UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -53,16 +56,29 @@ func superAdminUserRole(store UserStore) http.HandlerFunc {
 		}
 		var body struct {
 			Role string `json:"role"`
+			Name string `json:"name"`
+			Slug string `json:"slug"`
 		}
 		if json.NewDecoder(r.Body).Decode(&body) != nil || (body.Role != "user" && body.Role != "coach") {
 			writeError(w, 400, "INVALID_ROLE", "Role must be user or coach")
 			return
 		}
-		if err = s.SetCoachRole(r.Context(), actor, chiURLParam(r, "id"), body.Role); err != nil {
+		body.Name = strings.TrimSpace(body.Name)
+		body.Slug = strings.TrimSpace(body.Slug)
+		if body.Role == "coach" && (body.Name == "" || body.Slug == "") {
+			writeError(w, 400, "TENANT_DETAILS_REQUIRED", "Tenant name and slug are required")
+			return
+		}
+		if spaces, ok := store.(coachSpaceStore); ok {
+			err = spaces.SetCoachSpace(r.Context(), actor, chiURLParam(r, "id"), body.Role, body.Name, body.Slug)
+		} else {
+			err = s.SetCoachRole(r.Context(), actor, chiURLParam(r, "id"), body.Role)
+		}
+		if err != nil {
 			writeError(w, 409, "ROLE_CHANGE_REJECTED", err.Error())
 			return
 		}
-		writeJSON(w, 200, map[string]string{"role": body.Role})
+		writeJSON(w, 200, map[string]string{"role": body.Role, "slug": body.Slug})
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"regexp"
 	"strings"
 	"time"
@@ -206,10 +207,25 @@ type Media struct {
 type Service struct{ pool *pgxpool.Pool }
 
 func NewService(p *pgxpool.Pool) *Service { return &Service{p} }
+func tenantID(ctx context.Context) (string, error) {
+	id, ok := middleware.TenantID(ctx)
+	if !ok || id == "" {
+		return "", ErrForbidden
+	}
+	role, _ := middleware.TenantRole(ctx)
+	if role != "coach" {
+		return "", ErrForbidden
+	}
+	return id, nil
+}
 func (s *Service) Role(ctx context.Context, user string) (Role, error) {
 	var r Role
 	e := s.pool.QueryRow(ctx, `SELECT role FROM admin_users WHERE user_id=$1::uuid`, user).Scan(&r)
 	if errors.Is(e, pgx.ErrNoRows) {
+		var coach bool
+		if membershipErr := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tenant_memberships m JOIN tenants t ON t.id=m.tenant_id WHERE m.user_id=$1::uuid AND m.role='coach' AND m.status='active' AND t.status='active')`, user).Scan(&coach); membershipErr == nil && coach {
+			return "coach", nil
+		}
 		return "user", nil
 	}
 	return r, e
@@ -221,20 +237,49 @@ func scope(role Role, user string) (string, []any) {
 	return " AND owner_user_id=$1::uuid", []any{user}
 }
 func (s *Service) Dashboard(ctx context.Context, user string, role Role) (Dashboard, error) {
+	tenant, e := tenantID(ctx)
+	if e != nil {
+		return Dashboard{}, e
+	}
 	var d Dashboard
-	q := `SELECT (SELECT count(*) FROM lessons WHERE ($2 OR owner_user_id=$1::uuid OR owner_user_id IS NULL)),(SELECT count(*) FROM lessons WHERE status='published' AND ($2 OR owner_user_id=$1::uuid OR owner_user_id IS NULL)),(SELECT count(*) FROM exercises WHERE ($2 OR owner_user_id=$1::uuid OR owner_user_id IS NULL)),(SELECT count(*) FROM workouts WHERE ($2 OR owner_user_id=$1::uuid OR owner_user_id IS NULL)),(SELECT count(*) FROM workouts WHERE status='published' AND ($2 OR owner_user_id=$1::uuid OR owner_user_id IS NULL)),(SELECT count(*) FROM programs WHERE ($2 OR owner_user_id=$1::uuid OR owner_user_id IS NULL)),(SELECT count(*) FROM skills WHERE ($2 OR owner_user_id=$1::uuid OR owner_user_id IS NULL)),(SELECT count(*) FROM media_assets WHERE ($2 OR owner_user_id=$1::uuid))`
-	e := s.pool.QueryRow(ctx, q, user, role.CanManageAll()).Scan(&d.Lessons, &d.LessonsPublished, &d.Exercises, &d.Workouts, &d.WorkoutsPublished, &d.Programs, &d.Skills, &d.Media)
+	q := `SELECT (SELECT count(*) FROM lessons WHERE tenant_id=$1::uuid),(SELECT count(*) FROM lessons WHERE tenant_id=$1::uuid AND status='published'),(SELECT count(*) FROM exercises WHERE tenant_id=$1::uuid OR (tenant_id IS NULL AND standard_key IS NOT NULL)),(SELECT count(*) FROM workouts WHERE tenant_id=$1::uuid),(SELECT count(*) FROM workouts WHERE tenant_id=$1::uuid AND status='published'),(SELECT count(*) FROM programs WHERE tenant_id=$1::uuid),(SELECT count(*) FROM skills WHERE tenant_id=$1::uuid),(SELECT count(*) FROM media_assets WHERE tenant_id=$1::uuid)`
+	e = s.pool.QueryRow(ctx, q, tenant).Scan(&d.Lessons, &d.LessonsPublished, &d.Exercises, &d.Workouts, &d.WorkoutsPublished, &d.Programs, &d.Skills, &d.Media)
 	return d, e
 }
-func (s *Service) Analytics(ctx context.Context) (Analytics, error) {
-	var a Analytics
-	e := s.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM users),(SELECT count(DISTINCT user_id) FROM workout_sessions WHERE started_at>=NOW()-INTERVAL '7 days'),(SELECT count(DISTINCT user_id) FROM workout_sessions WHERE started_at>=NOW()-INTERVAL '30 days'),(SELECT count(*) FROM workout_sessions WHERE status='completed'),(SELECT count(*) FROM workout_sessions WHERE status='completed' AND completed_at>=NOW()-INTERVAL '7 days'),(SELECT count(*) FROM workout_sessions WHERE status='completed' AND completed_at>=NOW()-INTERVAL '30 days'),(SELECT count(*) FROM user_lesson_progress WHERE completed)`).Scan(&a.TotalUsers, &a.ActiveUsers7D, &a.ActiveUsers30D, &a.TotalWorkoutsCompleted, &a.Workouts7D, &a.Workouts30D, &a.TotalLessonsCompleted)
+func (s *Service) Analytics(ctx context.Context, user string) (Analytics, error) {
+	a := Analytics{
+		PopularWorkouts: []Metric{},
+		SkillProgress:   []Metric{},
+		TopAchievements: []Metric{},
+	}
+	tenant, tenantErr := tenantID(ctx)
+	if tenantErr != nil {
+		return a, tenantErr
+	}
+	e := s.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM tenant_memberships WHERE tenant_id=$1::uuid AND role='student' AND status='active'),(SELECT count(DISTINCT user_id) FROM workout_sessions WHERE tenant_id=$1::uuid AND started_at>=NOW()-INTERVAL '7 days'),(SELECT count(DISTINCT user_id) FROM workout_sessions WHERE tenant_id=$1::uuid AND started_at>=NOW()-INTERVAL '30 days'),(SELECT count(*) FROM workout_sessions WHERE tenant_id=$1::uuid AND status='completed'),(SELECT count(*) FROM workout_sessions WHERE tenant_id=$1::uuid AND status='completed' AND completed_at>=NOW()-INTERVAL '7 days'),(SELECT count(*) FROM workout_sessions WHERE tenant_id=$1::uuid AND status='completed' AND completed_at>=NOW()-INTERVAL '30 days'),(SELECT count(*) FROM user_lesson_progress WHERE tenant_id=$1::uuid AND completed)`, tenant).Scan(&a.TotalUsers, &a.ActiveUsers7D, &a.ActiveUsers30D, &a.TotalWorkoutsCompleted, &a.Workouts7D, &a.Workouts30D, &a.TotalLessonsCompleted)
 	if e != nil {
 		return a, e
 	}
-	a.PopularWorkouts, _ = s.metrics(ctx, `SELECT w.title,count(*)::int,COALESCE(avg(ws.duration_seconds),0)::float8 FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id WHERE ws.status='completed' GROUP BY w.id ORDER BY count(*) DESC LIMIT 10`)
-	a.SkillProgress, _ = s.metrics(ctx, `SELECT s.name,count(*)::int,COALESCE(avg(usp.current_level),0)::float8 FROM user_skill_progress usp JOIN skills s ON s.id=usp.skill_id GROUP BY s.id ORDER BY count(*) DESC LIMIT 10`)
-	a.TopAchievements, _ = s.metrics(ctx, `SELECT a.title,count(*)::int,0::float8 FROM user_achievements ua JOIN achievements a ON a.id=ua.achievement_id GROUP BY a.id ORDER BY count(*) DESC LIMIT 10`)
+	rows, _ := s.pool.Query(ctx, `SELECT w.title,count(*)::int,COALESCE(avg(ws.duration_seconds),0)::float8 FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id WHERE ws.tenant_id=$1::uuid AND ws.status='completed' GROUP BY w.id ORDER BY count(*) DESC LIMIT 10`, tenant)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var m Metric
+			if rows.Scan(&m.Name, &m.Value, &m.Secondary) == nil {
+				a.PopularWorkouts = append(a.PopularWorkouts, m)
+			}
+		}
+	}
+	rows, _ = s.pool.Query(ctx, `SELECT s.name,count(*)::int,COALESCE(avg(usp.current_level),0)::float8 FROM user_skill_progress usp JOIN skills s ON s.id=usp.skill_id WHERE usp.tenant_id=$1::uuid GROUP BY s.id ORDER BY count(*) DESC LIMIT 10`, tenant)
+	if rows != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var m Metric
+			if rows.Scan(&m.Name, &m.Value, &m.Secondary) == nil {
+				a.SkillProgress = append(a.SkillProgress, m)
+			}
+		}
+	}
 	return a, nil
 }
 func (s *Service) metrics(ctx context.Context, q string) ([]Metric, error) {
@@ -312,13 +357,21 @@ func (s *Service) uniqueSlug(ctx context.Context, table, value string, id *strin
 }
 
 func (s *Service) Get(ctx context.Context, kind, id, user string, role Role) (map[string]any, error) {
+	tenant, e := tenantID(ctx)
+	if e != nil {
+		return nil, e
+	}
 	x, ok := tables[kind]
 	if !ok {
 		return nil, ErrInvalid
 	}
-	q := fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid OR owner_user_id IS NULL)", x.table)
+	condition := "tenant_id=$2::uuid"
+	if kind == "exercises" {
+		condition = "tenant_id=$2::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)"
+	}
+	q := fmt.Sprintf("SELECT to_jsonb(t) FROM %s t WHERE id=$1::uuid AND (%s)", x.table, condition)
 	var raw []byte
-	if e := s.pool.QueryRow(ctx, q, id, role.CanManageAll(), user).Scan(&raw); errors.Is(e, pgx.ErrNoRows) {
+	if e := s.pool.QueryRow(ctx, q, id, tenant).Scan(&raw); errors.Is(e, pgx.ErrNoRows) {
 		return nil, ErrForbidden
 	} else if e != nil {
 		return nil, e
@@ -361,6 +414,10 @@ func (s *Service) Get(ctx context.Context, kind, id, user string, role Role) (ma
 	return out, nil
 }
 func (s *Service) Options(ctx context.Context, user string, role Role) (Options, error) {
+	tenant, e := tenantID(ctx)
+	if e != nil {
+		return Options{}, e
+	}
 	var out Options
 	sets := []struct {
 		q    string
@@ -368,16 +425,20 @@ func (s *Service) Options(ctx context.Context, user string, role Role) (Options,
 		rich bool
 	}{
 		{`SELECT id::text,name FROM lesson_categories ORDER BY sort_order,name`, &out.Categories, false},
-		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM exercises WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Exercises, true},
-		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM programs WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, &out.Programs, true},
-		{`SELECT pl.id::text,p.name||' · '||pl.title,p.status,pl.difficulty,0,pl.sort_order,p.owner_user_id::text,p.id::text FROM program_levels pl JOIN programs p ON p.id=pl.program_id WHERE p.status<>'archived' AND ($1 OR p.owner_user_id=$2::uuid OR p.owner_user_id IS NULL) ORDER BY p.name,pl.sort_order`, &out.ProgramLevels, true},
-		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,w.program_level_id::text FROM workouts w WHERE w.status<>'archived' AND ($1 OR w.owner_user_id=$2::uuid OR w.owner_user_id IS NULL) ORDER BY w.title`, &out.Workouts, true},
-		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,NULL::text FROM workouts w WHERE w.status='published' AND w.category='warmup' AND ($1 OR w.owner_user_id=$2::uuid OR w.owner_user_id IS NULL) ORDER BY w.is_default_warmup DESC,w.title`, &out.Warmups, true},
-		{`SELECT id::text,name,status,difficulty,0,sort_order,owner_user_id::text,NULL::text FROM skills WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY CASE WHEN sort_order=0 THEN 2147483647 ELSE sort_order END,name,id`, &out.Skills, true},
-		{`SELECT id::text,CASE WHEN type='image' THEN 'Фото: ' ELSE 'Видео: ' END||original_filename FROM media_assets WHERE status='ready' AND ($1 OR owner_user_id=$2::uuid) ORDER BY created_at DESC`, &out.Media, false},
+		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM exercises WHERE status<>'archived' AND (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)) ORDER BY name`, &out.Exercises, true},
+		{`SELECT id::text,name,status,difficulty,0,0,owner_user_id::text,NULL::text FROM programs WHERE status<>'archived' AND tenant_id=$1::uuid ORDER BY name`, &out.Programs, true},
+		{`SELECT pl.id::text,p.name||' · '||pl.title,p.status,pl.difficulty,0,pl.sort_order,p.owner_user_id::text,p.id::text FROM program_levels pl JOIN programs p ON p.id=pl.program_id WHERE p.status<>'archived' AND p.tenant_id=$1::uuid ORDER BY p.name,pl.sort_order`, &out.ProgramLevels, true},
+		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,w.program_level_id::text FROM workouts w WHERE w.status<>'archived' AND w.tenant_id=$1::uuid ORDER BY w.title`, &out.Workouts, true},
+		{`SELECT w.id::text,w.title,w.status,w.difficulty,w.estimated_minutes,w.sort_order,w.owner_user_id::text,NULL::text FROM workouts w WHERE w.status='published' AND w.category='warmup' AND w.tenant_id=$1::uuid ORDER BY w.is_default_warmup DESC,w.title`, &out.Warmups, true},
+		{`SELECT id::text,name,status,difficulty,0,sort_order,owner_user_id::text,NULL::text FROM skills WHERE status<>'archived' AND tenant_id=$1::uuid ORDER BY CASE WHEN sort_order=0 THEN 2147483647 ELSE sort_order END,name,id`, &out.Skills, true},
+		{`SELECT id::text,CASE WHEN type='image' THEN 'Фото: ' ELSE 'Видео: ' END||original_filename FROM media_assets WHERE status='ready' AND tenant_id=$1::uuid ORDER BY created_at DESC`, &out.Media, false},
 	}
 	for index, set := range sets {
-		rows, e := s.pool.Query(ctx, set.q, optionArgs(index, role, user)...)
+		args := []any{tenant}
+		if index == 0 {
+			args = nil
+		}
+		rows, e := s.pool.Query(ctx, set.q, args...)
 		if e != nil {
 			return out, e
 		}
@@ -396,7 +457,7 @@ func (s *Service) Options(ctx context.Context, user string, role Role) (Options,
 		}
 		rows.Close()
 	}
-	rows, e := s.pool.Query(ctx, `SELECT id::text,name,status,difficulty,owner_user_id::text,description,instructions,common_mistakes,coach_tips,movement_type,muscle_groups,equipment,tags,demo_media_id IS NOT NULL FROM exercises WHERE status<>'archived' AND ($1 OR owner_user_id=$2::uuid OR owner_user_id IS NULL) ORDER BY name`, role.CanManageAll(), user)
+	rows, e := s.pool.Query(ctx, `SELECT id::text,name,status,difficulty,owner_user_id::text,description,instructions,common_mistakes,coach_tips,movement_type,muscle_groups,equipment,tags,demo_media_id IS NOT NULL FROM exercises WHERE status<>'archived' AND (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL)) ORDER BY name`, tenant)
 	if e != nil {
 		return out, e
 	}
@@ -426,6 +487,10 @@ func optionArgs(index int, role Role, user string) []any {
 }
 
 func (s *Service) List(ctx context.Context, kind, user string, role Role, search, status string) ([]Item, error) {
+	tenant, e := tenantID(ctx)
+	if e != nil {
+		return nil, e
+	}
 	x, ok := tables[kind]
 	if !ok {
 		return nil, ErrInvalid
@@ -433,11 +498,10 @@ func (s *Service) List(ctx context.Context, kind, user string, role Role, search
 	if status != "" && !oneOf(status, "draft", "published", "archived") {
 		return nil, ErrInvalid
 	}
-	where := " WHERE 1=1"
-	args := []any{}
-	if !role.CanManageAll() {
-		args = append(args, user)
-		where += fmt.Sprintf(" AND (owner_user_id=$%d::uuid OR owner_user_id IS NULL)", len(args))
+	where := " WHERE tenant_id=$1::uuid"
+	args := []any{tenant}
+	if kind == "exercises" {
+		where = " WHERE (tenant_id=$1::uuid OR (tenant_id IS NULL AND owner_user_id IS NULL AND standard_key IS NOT NULL))"
 	}
 	if search != "" {
 		args = append(args, "%"+search+"%")
@@ -482,6 +546,11 @@ func validBlocks(blocks []Block) bool {
 	return true
 }
 func (s *Service) SaveLesson(ctx context.Context, user string, role Role, id *string, in LessonInput) (string, error) {
+	tenant, tenantErr := tenantID(ctx)
+	if tenantErr != nil {
+		return "", tenantErr
+	}
+	role = "coach" // platform role must never bypass tenant ownership
 	if !validBlocks(in.Blocks) || strings.TrimSpace(in.Title) == "" || in.DurationMinutes < 1 || !validID(in.CategoryID) || !validOptionalID(in.CoverMediaID) || !oneOf(in.Difficulty, "beginner", "intermediate", "advanced") {
 		return "", ErrInvalid
 	}
@@ -495,11 +564,11 @@ func (s *Service) SaveLesson(ctx context.Context, user string, role Role, id *st
 	blocks, _ := json.Marshal(in.Blocks)
 	if id == nil {
 		var out string
-		e := s.pool.QueryRow(ctx, `INSERT INTO lessons(category_id,title,slug,short_description,content,difficulty,duration_minutes,owner_user_id,status,content_blocks,cover_media_id) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8::uuid,'draft',$9::jsonb,$10::uuid) RETURNING id::text`, in.CategoryID, in.Title, in.Slug, in.ShortDescription, in.Content, in.Difficulty, in.DurationMinutes, user, blocks, in.CoverMediaID).Scan(&out)
+		e := s.pool.QueryRow(ctx, `INSERT INTO lessons(category_id,title,slug,short_description,content,difficulty,duration_minutes,owner_user_id,tenant_id,status,content_blocks,cover_media_id) VALUES($1::uuid,$2,$3,$4,$5,$6,$7,$8::uuid,$9::uuid,'draft',$10::jsonb,$11::uuid) RETURNING id::text`, in.CategoryID, in.Title, in.Slug, in.ShortDescription, in.Content, in.Difficulty, in.DurationMinutes, user, tenant, blocks, in.CoverMediaID).Scan(&out)
 		return out, e
 	}
 	var out string
-	e := s.pool.QueryRow(ctx, `UPDATE lessons SET category_id=$3::uuid,title=$4,slug=$5,short_description=$6,content=$7,difficulty=$8,duration_minutes=$9,content_blocks=$10::jsonb,cover_media_id=$11::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$12::uuid) RETURNING id::text`, *id, role.CanManageAll(), in.CategoryID, in.Title, in.Slug, in.ShortDescription, in.Content, in.Difficulty, in.DurationMinutes, blocks, in.CoverMediaID, user).Scan(&out)
+	e := s.pool.QueryRow(ctx, `UPDATE lessons SET category_id=$3::uuid,title=$4,slug=$5,short_description=$6,content=$7,difficulty=$8,duration_minutes=$9,content_blocks=$10::jsonb,cover_media_id=$11::uuid WHERE id=$1::uuid AND tenant_id=$2::uuid RETURNING id::text`, *id, tenant, in.CategoryID, in.Title, in.Slug, in.ShortDescription, in.Content, in.Difficulty, in.DurationMinutes, blocks, in.CoverMediaID).Scan(&out)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return "", ErrForbidden
 	}
@@ -636,6 +705,26 @@ func validBuilderEnums(kind string, in BuilderInput) bool {
 }
 
 func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role, id *string, in BuilderInput) (string, error) {
+	tenant, tenantErr := tenantID(ctx)
+	if tenantErr != nil {
+		return "", tenantErr
+	}
+	_ = tenant
+	role = "coach" // platform role must never bypass tenant ownership
+	if id != nil {
+		table, ok := tables[kind]
+		if !ok {
+			return "", ErrInvalid
+		}
+		var accessible bool
+		query := fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1::uuid AND tenant_id=$2::uuid AND owner_user_id=$3::uuid)`, table.table)
+		if e := s.pool.QueryRow(ctx, query, *id, tenant, user).Scan(&accessible); e != nil {
+			return "", e
+		}
+		if !accessible {
+			return "", ErrForbidden
+		}
+	}
 	if kind == "workouts" {
 		if err := validateWorkoutInput(in, false); err != nil {
 			return "", err
@@ -646,7 +735,7 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 	}
 	if kind == "exercises" && in.DemoMediaID != nil {
 		var ok bool
-		if e := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM media_assets WHERE id=$1::uuid AND status='ready' AND ($2 OR owner_user_id=$3::uuid) AND mime_type IN ('video/mp4','video/webm','image/gif','image/jpeg','image/png','image/webp') AND size_bytes<=5242880 AND (type='image' OR duration_seconds BETWEEN 1 AND 6))`, *in.DemoMediaID, role.CanManageAll(), user).Scan(&ok); e != nil || !ok {
+		if e := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM media_assets WHERE id=$1::uuid AND tenant_id=$2::uuid AND status='ready' AND mime_type IN ('video/mp4','video/webm','image/gif','image/jpeg','image/png','image/webp') AND size_bytes<=5242880 AND (type='image' OR duration_seconds BETWEEN 1 AND 6))`, *in.DemoMediaID, tenant).Scan(&ok); e != nil || !ok {
 			return "", ErrInvalid
 		}
 	}
@@ -669,9 +758,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			return "", ErrInvalid
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,owner_user_id,status,movement_type,coach_tips,cover_media_id,demo_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::uuid,'draft',$11,$12,$13::uuid,$14::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, user, in.MovementType, in.CoachTips, in.CoverMediaID, in.DemoMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,owner_user_id,tenant_id,status,movement_type,coach_tips,cover_media_id,demo_media_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::uuid,$11::uuid,'draft',$12,$13,$14::uuid,$15::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, user, tenant, in.MovementType, in.CoachTips, in.CoverMediaID, in.DemoMediaID).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,tags=$12,movement_type=$13,coach_tips=$14,cover_media_id=$15::uuid,demo_media_id=$16::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, in.MovementType, in.CoachTips, in.CoverMediaID, in.DemoMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE exercises SET name=$4,slug=$5,description=$6,instructions=$7,common_mistakes=$8,difficulty=$9,muscle_groups=$10,equipment=$11,tags=$12,movement_type=$13,coach_tips=$14,cover_media_id=$15::uuid,demo_media_id=$16::uuid WHERE id=$1::uuid AND tenant_id=$2::uuid AND owner_user_id=$3::uuid RETURNING id::text`, *id, tenant, user, in.Name, in.Slug, in.Description, in.Instructions, in.CommonMistakes, in.Difficulty, in.MuscleGroups, in.Equipment, in.Tags, in.MovementType, in.CoachTips, in.CoverMediaID, in.DemoMediaID).Scan(&out)
 		}
 	case "programs":
 		levels := normalizedProgramLevels(in)
@@ -679,9 +768,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			return "", ErrInvalid
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO programs(name,slug,description,difficulty,duration_weeks,category,owner_user_id,status,cover_media_id) VALUES($1,$2,$3,$4,$5,$6,$7::uuid,'draft',$8::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Difficulty, in.DurationWeeks, in.Category, user, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO programs(name,slug,description,difficulty,duration_weeks,category,owner_user_id,tenant_id,status,cover_media_id) VALUES($1,$2,$3,$4,$5,$6,$7::uuid,$8::uuid,'draft',$9::uuid) RETURNING id::text`, in.Name, in.Slug, in.Description, in.Difficulty, in.DurationWeeks, in.Category, user, tenant, in.CoverMediaID).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE programs SET name=$4,slug=$5,description=$6,difficulty=$7,duration_weeks=$8,category=$9,cover_media_id=$10::uuid WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Name, in.Slug, in.Description, in.Difficulty, in.DurationWeeks, in.Category, in.CoverMediaID).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE programs SET name=$4,slug=$5,description=$6,difficulty=$7,duration_weeks=$8,category=$9,cover_media_id=$10::uuid WHERE id=$1::uuid AND tenant_id=$2::uuid AND owner_user_id=$3::uuid RETURNING id::text`, *id, tenant, user, in.Name, in.Slug, in.Description, in.Difficulty, in.DurationWeeks, in.Category, in.CoverMediaID).Scan(&out)
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, `UPDATE workouts SET program_id=NULL,program_level_id=NULL,day_number=NULL,sort_order=0 WHERE program_id=$1::uuid`, out)
@@ -698,7 +787,7 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 					if e != nil {
 						break
 					}
-					tag, updateErr := tx.Exec(ctx, `UPDATE workouts SET program_id=$1::uuid,program_level_id=$2::uuid,day_number=$3,sort_order=$4 WHERE id=$5::uuid AND ($6 OR owner_user_id=$7::uuid)`, out, levelID, dayNumber, workout.SortOrder, workout.WorkoutID, role.CanManageAll(), user)
+					tag, updateErr := tx.Exec(ctx, `UPDATE workouts SET program_id=$1::uuid,program_level_id=$2::uuid,day_number=$3,sort_order=$4 WHERE id=$5::uuid AND tenant_id=$6::uuid AND owner_user_id=$7::uuid`, out, levelID, dayNumber, workout.SortOrder, workout.WorkoutID, tenant, user)
 					e = updateErr
 					if e == nil && tag.RowsAffected() == 0 {
 						return "", ErrForbidden
@@ -723,7 +812,7 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 				return "", invalid("Выберите другую разминку.")
 			}
 			var validWarmup bool
-			e = tx.QueryRow(ctx, `SELECT category='warmup' AND status<>'archived' AND NOT warmup_enabled FROM workouts WHERE id=$1::uuid`, *in.WarmupWorkoutID).Scan(&validWarmup)
+			e = tx.QueryRow(ctx, `SELECT category='warmup' AND status<>'archived' AND NOT warmup_enabled FROM workouts WHERE id=$1::uuid AND tenant_id=$2::uuid`, *in.WarmupWorkoutID, tenant).Scan(&validWarmup)
 			if errors.Is(e, pgx.ErrNoRows) {
 				return "", invalid("Выбранная разминка недоступна или имеет неверную категорию.")
 			}
@@ -735,9 +824,9 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 			}
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,owner_user_id,status,cover_media_id,category,warmup_enabled,warmup_workout_id) VALUES($1,$2,$3,$4,$5::uuid,'draft',$6::uuid,$7,$8,$9::uuid) RETURNING id::text`, in.Title, in.Description, in.Difficulty, in.EstimatedMinutes, user, in.CoverMediaID, in.Category, warmupEnabled, in.WarmupWorkoutID).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,owner_user_id,tenant_id,status,cover_media_id,category,warmup_enabled,warmup_workout_id) VALUES($1,$2,$3,$4,$5::uuid,$6::uuid,'draft',$7::uuid,$8,$9,$10::uuid) RETURNING id::text`, in.Title, in.Description, in.Difficulty, in.EstimatedMinutes, user, tenant, in.CoverMediaID, in.Category, warmupEnabled, in.WarmupWorkoutID).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE workouts SET title=$4,description=$5,difficulty=$6,estimated_minutes=$7,cover_media_id=$8::uuid,category=$9,warmup_enabled=$10,warmup_workout_id=$11::uuid,is_default_warmup=CASE WHEN $9='warmup' THEN is_default_warmup ELSE false END WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Title, in.Description, in.Difficulty, in.EstimatedMinutes, in.CoverMediaID, in.Category, warmupEnabled, in.WarmupWorkoutID).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE workouts SET title=$4,description=$5,difficulty=$6,estimated_minutes=$7,cover_media_id=$8::uuid,category=$9,warmup_enabled=$10,warmup_workout_id=$11::uuid,is_default_warmup=CASE WHEN $9='warmup' THEN is_default_warmup ELSE false END WHERE id=$1::uuid AND tenant_id=$2::uuid AND owner_user_id=$3::uuid RETURNING id::text`, *id, tenant, user, in.Title, in.Description, in.Difficulty, in.EstimatedMinutes, in.CoverMediaID, in.Category, warmupEnabled, in.WarmupWorkoutID).Scan(&out)
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, `DELETE FROM workout_exercises WHERE workout_id=$1::uuid`, out)
@@ -770,18 +859,18 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 		}
 		var currentOrder int
 		if id != nil {
-			_ = tx.QueryRow(ctx, `SELECT sort_order FROM skills WHERE id=$1::uuid`, *id).Scan(&currentOrder)
+			_ = tx.QueryRow(ctx, `SELECT sort_order FROM skills WHERE id=$1::uuid AND tenant_id=$2::uuid`, *id, tenant).Scan(&currentOrder)
 		}
 		if in.SortOrder < 1 {
-			e = tx.QueryRow(ctx, `SELECT COALESCE(max(sort_order),0)+1 FROM skills`).Scan(&in.SortOrder)
+			e = tx.QueryRow(ctx, `SELECT COALESCE(max(sort_order),0)+1 FROM skills WHERE tenant_id=$1::uuid`, tenant).Scan(&in.SortOrder)
 		}
 		if e == nil && in.SortOrder != currentOrder {
-			_, e = tx.Exec(ctx, `UPDATE skills SET sort_order=sort_order+1 WHERE sort_order >= $1 AND ($2::uuid IS NULL OR id<>$2::uuid)`, in.SortOrder, id)
+			_, e = tx.Exec(ctx, `UPDATE skills SET sort_order=sort_order+1 WHERE tenant_id=$3::uuid AND sort_order >= $1 AND ($2::uuid IS NULL OR id<>$2::uuid)`, in.SortOrder, id, tenant)
 		}
 		if id == nil {
-			e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::uuid,'draft',$12::uuid,$13) RETURNING id::text`, in.Code, in.Name, in.Description, in.Category, in.MapGroup, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, user, in.CoverMediaID, in.SortOrder).Scan(&out)
+			e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,tenant_id,status,cover_media_id,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::uuid,$12::uuid,'draft',$13::uuid,$14) RETURNING id::text`, in.Code, in.Name, in.Description, in.Category, in.MapGroup, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, user, tenant, in.CoverMediaID, in.SortOrder).Scan(&out)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE skills SET code=$4,name=$5,description=$6,category=$7,map_group=$8,difficulty=$9,icon=$10,xp_reward=$11,final_criterion_type=$12,final_criterion_value=$13,cover_media_id=$14::uuid,sort_order=$15 WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid) RETURNING id::text`, *id, role.CanManageAll(), user, in.Code, in.Name, in.Description, in.Category, in.MapGroup, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, in.CoverMediaID, in.SortOrder).Scan(&out)
+			e = tx.QueryRow(ctx, `UPDATE skills SET code=$4,name=$5,description=$6,category=$7,map_group=$8,difficulty=$9,icon=$10,xp_reward=$11,final_criterion_type=$12,final_criterion_value=$13,cover_media_id=$14::uuid,sort_order=$15 WHERE id=$1::uuid AND tenant_id=$2::uuid AND owner_user_id=$3::uuid RETURNING id::text`, *id, tenant, user, in.Code, in.Name, in.Description, in.Category, in.MapGroup, in.Difficulty, in.Icon, in.XPReward, in.FinalCriterionType, in.FinalCriterionValue, in.CoverMediaID, in.SortOrder).Scan(&out)
 		}
 		if e == nil {
 			_, e = tx.Exec(ctx, `DELETE FROM skill_requirements WHERE skill_id=$1::uuid`, out)
@@ -828,9 +917,22 @@ func (s *Service) SaveBuilder(ctx context.Context, kind, user string, role Role,
 	return out, nil
 }
 func (s *Service) Lifecycle(ctx context.Context, kind, id, user string, role Role, status string) error {
+	tenant, e := tenantID(ctx)
+	if e != nil {
+		return e
+	}
+	role = "coach"
 	x, ok := tables[kind]
 	if !ok || (status != "draft" && status != "published" && status != "archived") {
 		return ErrInvalid
+	}
+	var accessible bool
+	check := fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %s WHERE id=$1::uuid AND tenant_id=$2::uuid AND owner_user_id=$3::uuid)`, x.table)
+	if e = s.pool.QueryRow(ctx, check, id, tenant, user).Scan(&accessible); e != nil {
+		return e
+	}
+	if !accessible {
+		return ErrForbidden
 	}
 	if status == "published" {
 		if e := s.validatePublish(ctx, kind, id); e != nil {
@@ -842,8 +944,8 @@ func (s *Service) Lifecycle(ctx context.Context, kind, id, user string, role Rol
 			return e
 		}
 	}
-	q := fmt.Sprintf(`UPDATE %s SET status=$2,published_by=CASE WHEN $2='published' THEN $3::uuid ELSE published_by END,published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END WHERE id=$1::uuid AND ($4 OR owner_user_id=$3::uuid)`, x.table)
-	tag, e := s.pool.Exec(ctx, q, id, status, user, role.CanManageAll())
+	q := fmt.Sprintf(`UPDATE %s SET status=$2,published_by=CASE WHEN $2='published' THEN $3::uuid ELSE published_by END,published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END WHERE id=$1::uuid AND tenant_id=$4::uuid AND owner_user_id=$3::uuid`, x.table)
+	tag, e := s.pool.Exec(ctx, q, id, status, user, tenant)
 	if e != nil {
 		return e
 	}
@@ -987,13 +1089,18 @@ func (s *Service) validateArchive(ctx context.Context, kind, id string) error {
 	return nil
 }
 func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Role) (string, error) {
+	tenant, e := tenantID(ctx)
+	if e != nil {
+		return "", e
+	}
+	role = "coach"
 	x, ok := tables[kind]
 	if !ok {
 		return "", ErrInvalid
 	}
 	if kind == "lessons" {
 		var out string
-		e := s.pool.QueryRow(ctx, `INSERT INTO lessons(category_id,title,slug,short_description,content,difficulty,duration_minutes,sort_order,published,owner_user_id,status,content_blocks,cover_media_id) SELECT category_id,title||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),short_description,content,difficulty,duration_minutes,sort_order,false,$2::uuid,'draft',content_blocks,cover_media_id FROM lessons WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e := s.pool.QueryRow(ctx, `INSERT INTO lessons(category_id,title,slug,short_description,content,difficulty,duration_minutes,sort_order,published,owner_user_id,status,content_blocks,cover_media_id,tenant_id) SELECT category_id,title||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),short_description,content,difficulty,duration_minutes,sort_order,false,$2::uuid,'draft',content_blocks,cover_media_id,$3::uuid FROM lessons WHERE id=$1::uuid AND tenant_id=$3::uuid AND owner_user_id=$2::uuid RETURNING id::text`, id, user, tenant).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}
@@ -1001,7 +1108,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 	}
 	if kind == "exercises" {
 		var out string
-		e := s.pool.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,video_url,image_url,owner_user_id,status,movement_type,coach_tips,cover_media_id) SELECT name||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,video_url,image_url,$2::uuid,'draft',movement_type,coach_tips,cover_media_id FROM exercises WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e := s.pool.QueryRow(ctx, `INSERT INTO exercises(name,slug,description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,video_url,image_url,owner_user_id,status,movement_type,coach_tips,cover_media_id,tenant_id) SELECT name||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),description,instructions,common_mistakes,difficulty,muscle_groups,equipment,tags,video_url,image_url,$2::uuid,'draft',movement_type,coach_tips,cover_media_id,$3::uuid FROM exercises WHERE id=$1::uuid AND tenant_id=$3::uuid AND owner_user_id=$2::uuid RETURNING id::text`, id, user, tenant).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}
@@ -1014,7 +1121,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		defer tx.Rollback(ctx)
 		var out string
-		e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,sort_order,owner_user_id,status,cover_media_id,category,warmup_enabled,warmup_workout_id) SELECT title||' — копия',description,difficulty,estimated_minutes,0,$2::uuid,'draft',cover_media_id,category,warmup_enabled,warmup_workout_id FROM workouts w WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e = tx.QueryRow(ctx, `INSERT INTO workouts(title,description,difficulty,estimated_minutes,sort_order,owner_user_id,status,cover_media_id,category,warmup_enabled,warmup_workout_id,tenant_id) SELECT title||' — копия',description,difficulty,estimated_minutes,0,$2::uuid,'draft',cover_media_id,category,warmup_enabled,warmup_workout_id,$3::uuid FROM workouts w WHERE id=$1::uuid AND tenant_id=$3::uuid AND owner_user_id=$2::uuid RETURNING id::text`, id, user, tenant).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}
@@ -1034,7 +1141,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		defer tx.Rollback(ctx)
 		var out string
-		e = tx.QueryRow(ctx, `INSERT INTO programs(name,slug,description,difficulty,duration_weeks,published,category,owner_user_id,status,cover_media_id,coach_description) SELECT name||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),description,difficulty,duration_weeks,false,category,$2::uuid,'draft',cover_media_id,coach_description FROM programs WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e = tx.QueryRow(ctx, `INSERT INTO programs(name,slug,description,difficulty,duration_weeks,published,category,owner_user_id,status,cover_media_id,coach_description,tenant_id) SELECT name||' — копия',slug||'-copy-'||substr(gen_random_uuid()::text,1,8),description,difficulty,duration_weeks,false,category,$2::uuid,'draft',cover_media_id,coach_description,$3::uuid FROM programs WHERE id=$1::uuid AND tenant_id=$3::uuid AND owner_user_id=$2::uuid RETURNING id::text`, id, user, tenant).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}
@@ -1054,7 +1161,7 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 		}
 		defer tx.Rollback(ctx)
 		var out string
-		e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id) SELECT code||'_COPY_'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,6)),name||' — копия',description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,$2::uuid,'draft',cover_media_id FROM skills WHERE id=$1::uuid AND ($3 OR owner_user_id=$2::uuid) RETURNING id::text`, id, user, role.CanManageAll()).Scan(&out)
+		e = tx.QueryRow(ctx, `INSERT INTO skills(code,name,description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,owner_user_id,status,cover_media_id,tenant_id) SELECT code||'_COPY_'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,6)),name||' — копия',description,category,map_group,difficulty,icon,xp_reward,final_criterion_type,final_criterion_value,$2::uuid,'draft',cover_media_id,$3::uuid FROM skills WHERE id=$1::uuid AND tenant_id=$3::uuid AND owner_user_id=$2::uuid RETURNING id::text`, id, user, tenant).Scan(&out)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return "", ErrForbidden
 		}
@@ -1070,7 +1177,11 @@ func (s *Service) Duplicate(ctx context.Context, kind, id, user string, role Rol
 	return "", fmt.Errorf("%w: duplicate %s is not available", ErrInvalid, x.table)
 }
 func (s *Service) ListMedia(ctx context.Context, user string, role Role) ([]Media, error) {
-	rows, e := s.pool.Query(ctx, `SELECT m.id::text,m.owner_user_id::text,m.type,m.status,m.storage_provider,m.storage_key,m.url,m.thumbnail_url,m.original_filename,m.mime_type,m.size_bytes,m.created_at,(SELECT count(*) FROM lessons WHERE cover_media_id=m.id OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',m.id::text)))+(SELECT count(*) FROM exercises WHERE cover_media_id=m.id OR demo_media_id=m.id)+(SELECT count(*) FROM workouts WHERE cover_media_id=m.id)+(SELECT count(*) FROM programs WHERE cover_media_id=m.id)+(SELECT count(*) FROM skills WHERE cover_media_id=m.id) FROM media_assets m WHERE $2 OR m.owner_user_id=$1::uuid ORDER BY m.created_at DESC`, user, role.CanManageAll())
+	tenant, tenantErr := tenantID(ctx)
+	if tenantErr != nil {
+		return nil, tenantErr
+	}
+	rows, e := s.pool.Query(ctx, `SELECT m.id::text,m.owner_user_id::text,m.type,m.status,m.storage_provider,m.storage_key,m.url,m.thumbnail_url,m.original_filename,m.mime_type,m.size_bytes,m.created_at,(SELECT count(*) FROM lessons WHERE tenant_id=$1::uuid AND (cover_media_id=m.id OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',m.id::text))))+(SELECT count(*) FROM exercises WHERE tenant_id=$1::uuid AND (cover_media_id=m.id OR demo_media_id=m.id))+(SELECT count(*) FROM workouts WHERE tenant_id=$1::uuid AND cover_media_id=m.id)+(SELECT count(*) FROM programs WHERE tenant_id=$1::uuid AND cover_media_id=m.id)+(SELECT count(*) FROM skills WHERE tenant_id=$1::uuid AND cover_media_id=m.id) FROM media_assets m WHERE m.tenant_id=$1::uuid ORDER BY m.created_at DESC`, tenant)
 	if e != nil {
 		return nil, e
 	}
@@ -1086,14 +1197,18 @@ func (s *Service) ListMedia(ctx context.Context, user string, role Role) ([]Medi
 	return out, rows.Err()
 }
 func (s *Service) CreateExternalMedia(ctx context.Context, user string, in MediaInput) (Media, error) {
+	tenant, tenantErr := tenantID(ctx)
+	if tenantErr != nil {
+		return Media{}, tenantErr
+	}
 	isHTTPS := strings.HasPrefix(in.URL, "https://")
 	isLocalImage := in.Type == "image" && strings.HasPrefix(in.URL, "data:"+in.MIMEType+";base64,") && in.SizeBytes <= 10<<20
 	if (in.Type != "image" && in.Type != "video") || (!isHTTPS && !isLocalImage) || !validMime(in.Type, in.MIMEType) || in.SizeBytes < 0 {
 		return Media{}, ErrInvalid
 	}
-	key := fmt.Sprintf("external/%s/%d", user, time.Now().UnixNano())
+	key := fmt.Sprintf("tenants/%s/media/%d", tenant, time.Now().UnixNano())
 	var id string
-	e := s.pool.QueryRow(ctx, `INSERT INTO media_assets(owner_user_id,type,storage_provider,storage_key,url,thumbnail_url,original_filename,mime_type,size_bytes,width,height,duration_seconds) VALUES($1::uuid,$2,'external',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id::text`, user, in.Type, key, in.URL, in.ThumbnailURL, safeName(in.OriginalFilename), in.MIMEType, in.SizeBytes, in.Width, in.Height, in.DurationSeconds).Scan(&id)
+	e := s.pool.QueryRow(ctx, `INSERT INTO media_assets(owner_user_id,tenant_id,type,storage_provider,storage_key,url,thumbnail_url,original_filename,mime_type,size_bytes,width,height,duration_seconds) VALUES($1::uuid,$2::uuid,$3,'external',$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id::text`, user, tenant, in.Type, key, in.URL, in.ThumbnailURL, safeName(in.OriginalFilename), in.MIMEType, in.SizeBytes, in.Width, in.Height, in.DurationSeconds).Scan(&id)
 	if e != nil {
 		return Media{}, e
 	}
@@ -1122,15 +1237,19 @@ func safeName(v string) string {
 	return v
 }
 func (s *Service) DeleteMedia(ctx context.Context, user, id string, role Role) error {
+	tenant, tenantErr := tenantID(ctx)
+	if tenantErr != nil {
+		return tenantErr
+	}
 	var refs int
-	e := s.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM lessons WHERE cover_media_id=$1::uuid OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',$1::text)))+(SELECT count(*) FROM exercises WHERE cover_media_id=$1::uuid OR demo_media_id=$1::uuid)+(SELECT count(*) FROM workouts WHERE cover_media_id=$1::uuid)+(SELECT count(*) FROM programs WHERE cover_media_id=$1::uuid)+(SELECT count(*) FROM skills WHERE cover_media_id=$1::uuid)`, id).Scan(&refs)
+	e := s.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM lessons WHERE tenant_id=$2::uuid AND (cover_media_id=$1::uuid OR content_blocks @> jsonb_build_array(jsonb_build_object('media_id',$1::text))))+(SELECT count(*) FROM exercises WHERE tenant_id=$2::uuid AND (cover_media_id=$1::uuid OR demo_media_id=$1::uuid))+(SELECT count(*) FROM workouts WHERE tenant_id=$2::uuid AND cover_media_id=$1::uuid)+(SELECT count(*) FROM programs WHERE tenant_id=$2::uuid AND cover_media_id=$1::uuid)+(SELECT count(*) FROM skills WHERE tenant_id=$2::uuid AND cover_media_id=$1::uuid)`, id, tenant).Scan(&refs)
 	if e != nil {
 		return e
 	}
 	if refs > 0 {
 		return ErrInUse
 	}
-	tag, e := s.pool.Exec(ctx, `DELETE FROM media_assets WHERE id=$1::uuid AND ($2 OR owner_user_id=$3::uuid)`, id, role.CanManageAll(), user)
+	tag, e := s.pool.Exec(ctx, `DELETE FROM media_assets WHERE id=$1::uuid AND tenant_id=$2::uuid`, id, tenant)
 	if e != nil {
 		return e
 	}

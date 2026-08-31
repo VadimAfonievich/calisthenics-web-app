@@ -28,6 +28,7 @@ import {
 } from "../pages/coachAuthoring";
 import { ProgramsPage, ProgramDetailPage } from "../pages/programs";
 import { SuperAdminUsersPage } from "../pages/superAdmin";
+import {TenantSettingsPage} from '../pages/tenantSettings'
 const guarded = (page: ReactNode) => <CoachGuard>{page}</CoachGuard>;
 export function AppRouter() {
   return (
@@ -62,6 +63,7 @@ export function AppRouter() {
         <Route path="coach/:kind/new" element={guarded(<CoachEditor />)} />
         <Route path="coach/:kind/:id/edit" element={guarded(<CoachEditor />)} />
         <Route path="coach/media" element={guarded(<CoachMediaPage />)} />
+        <Route path="coach/settings" element={guarded(<TenantSettingsPage/>)} />
         <Route
           path="coach/analytics"
           element={guarded(<CoachAnalyticsPage />)}

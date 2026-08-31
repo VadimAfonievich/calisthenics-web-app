@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,7 +48,8 @@ type Service struct{ pool *pgxpool.Pool }
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool} }
 
 func (s *Service) List(ctx context.Context, userID string) ([]Lesson, error) {
-	rows, err := s.pool.Query(ctx, lessonSelect+` WHERE l.published ORDER BY c.sort_order,l.sort_order,l.title`, userID)
+	tenant, _ := middleware.TenantID(ctx)
+	rows, err := s.pool.Query(ctx, lessonSelect+` WHERE l.published AND l.tenant_id=$2::uuid ORDER BY c.sort_order,l.sort_order,l.title`, userID, nullableTenant(tenant))
 	if err != nil {
 		return nil, err
 	}
@@ -67,9 +69,10 @@ func (s *Service) List(ctx context.Context, userID string) ([]Lesson, error) {
 	return items, rows.Err()
 }
 func (s *Service) Get(ctx context.Context, userID, lessonID string) (Lesson, error) {
+	tenant, _ := middleware.TenantID(ctx)
 	var item Lesson
 	var blocks []byte
-	err := s.pool.QueryRow(ctx, lessonSelect+` WHERE l.id=$2::uuid AND l.published`, userID, lessonID).Scan(&item.ID, &item.CategoryID, &item.CategoryName, &item.Title, &item.ShortDescription, &item.Content, &blocks, &item.CoverMediaURL, &item.Difficulty, &item.DurationMinutes, &item.Completed, &item.ProgressPercent)
+	err := s.pool.QueryRow(ctx, lessonSelect+` WHERE l.id=$2::uuid AND l.published AND l.tenant_id=$3::uuid`, userID, lessonID, nullableTenant(tenant)).Scan(&item.ID, &item.CategoryID, &item.CategoryName, &item.Title, &item.ShortDescription, &item.Content, &blocks, &item.CoverMediaURL, &item.Difficulty, &item.DurationMinutes, &item.Completed, &item.ProgressPercent)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Lesson{}, ErrNotFound
 	}
@@ -85,13 +88,17 @@ COALESCE(cm.url,''),l.difficulty,l.duration_minutes,COALESCE(p.completed,false),
 FROM lessons l JOIN lesson_categories c ON c.id=l.category_id LEFT JOIN media_assets cm ON cm.id=l.cover_media_id LEFT JOIN user_lesson_progress p ON p.lesson_id=l.id AND p.user_id=$1::uuid`
 
 func (s *Service) Complete(ctx context.Context, userID, lessonID string) (Completion, error) {
+	tenant, _ := middleware.TenantID(ctx)
+	if tenant == "" {
+		return Completion{}, ErrNotFound
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Completion{}, err
 	}
 	defer tx.Rollback(ctx)
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lessons WHERE id=$1::uuid AND published)`, lessonID).Scan(&exists); err != nil || !exists {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM lessons WHERE id=$1::uuid AND tenant_id=$2::uuid AND published)`, lessonID, tenant).Scan(&exists); err != nil || !exists {
 		return Completion{}, ErrNotFound
 	}
 	var wasCompleted bool
@@ -99,7 +106,7 @@ func (s *Service) Complete(ctx context.Context, userID, lessonID string) (Comple
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Completion{}, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO user_lesson_progress (user_id,lesson_id,completed,progress_percent,completed_at) VALUES ($1::uuid,$2::uuid,true,100,NOW()) ON CONFLICT (user_id,lesson_id) DO UPDATE SET completed=true,progress_percent=100,completed_at=COALESCE(user_lesson_progress.completed_at,NOW())`, userID, lessonID)
+	_, err = tx.Exec(ctx, `INSERT INTO user_lesson_progress (user_id,lesson_id,tenant_id,completed,progress_percent,completed_at) VALUES ($1::uuid,$2::uuid,$3::uuid,true,100,NOW()) ON CONFLICT (user_id,lesson_id) DO UPDATE SET completed=true,progress_percent=100,completed_at=COALESCE(user_lesson_progress.completed_at,NOW()),tenant_id=EXCLUDED.tenant_id`, userID, lessonID, tenant)
 	if err != nil {
 		return Completion{}, err
 	}
@@ -117,4 +124,11 @@ func (s *Service) Complete(ctx context.Context, userID, lessonID string) (Comple
 		return Completion{}, err
 	}
 	return result, nil
+}
+
+func nullableTenant(id string) any {
+	if id == "" {
+		return nil
+	}
+	return id
 }

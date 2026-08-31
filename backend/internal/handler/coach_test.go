@@ -17,7 +17,7 @@ func (s coachStub) Role(context.Context, string) (c.Role, error) { return s.role
 func (coachStub) Dashboard(context.Context, string, c.Role) (c.Dashboard, error) {
 	return c.Dashboard{}, nil
 }
-func (coachStub) Analytics(context.Context) (c.Analytics, error) { return c.Analytics{}, nil }
+func (coachStub) Analytics(context.Context, string) (c.Analytics, error) { return c.Analytics{}, nil }
 func (coachStub) List(context.Context, string, string, c.Role, string, string) ([]c.Item, error) {
 	return nil, nil
 }

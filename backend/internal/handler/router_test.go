@@ -32,6 +32,9 @@ func TestHealthzReportsReadyDependencies(t *testing.T) {
 	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
 		t.Fatalf("CORS origin = %q", got)
 	}
+	if got := response.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "X-Tenant-Slug") {
+		t.Fatalf("CORS headers = %q, want X-Tenant-Slug", got)
+	}
 	if got := response.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Fatalf("X-Content-Type-Options = %q", got)
 	}

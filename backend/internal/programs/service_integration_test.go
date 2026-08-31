@@ -2,6 +2,7 @@ package programs
 
 import (
 	"context"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"os"
 	"testing"
 
@@ -27,20 +28,19 @@ func TestSelfServiceProgramProgressPostgres(t *testing.T) {
 	const workout2 = "93000000-0000-0000-0000-000000000022"
 	const student1 = "93000000-0000-0000-0000-000000000031"
 	const student2 = "93000000-0000-0000-0000-000000000032"
+	const tenant = "93000000-0000-0000-0000-000000000041"
 
 	defer func() {
-		for _, q := range []string{
-			`DELETE FROM workout_sessions WHERE user_id IN ($1,$2)`,
-			`DELETE FROM user_program_progress WHERE user_id IN ($1,$2)`,
-			`DELETE FROM workouts WHERE id IN ($3,$4)`,
-			`DELETE FROM program_levels WHERE id IN ($5,$6)`,
-			`DELETE FROM programs WHERE id=$7`,
-			`DELETE FROM user_progress WHERE user_id IN ($1,$2)`,
-			`DELETE FROM profiles WHERE user_id IN ($1,$2)`,
-			`DELETE FROM users WHERE id IN ($1,$2)`,
-		} {
-			_, _ = pool.Exec(ctx, q, student1, student2, workout1, workout2, level1, level2, program)
-		}
+		_, _ = pool.Exec(ctx, `DELETE FROM workout_sessions WHERE user_id IN ($1,$2)`, student1, student2)
+		_, _ = pool.Exec(ctx, `DELETE FROM user_program_progress WHERE user_id IN ($1,$2)`, student1, student2)
+		_, _ = pool.Exec(ctx, `DELETE FROM workouts WHERE id IN ($1,$2)`, workout1, workout2)
+		_, _ = pool.Exec(ctx, `DELETE FROM program_levels WHERE id IN ($1,$2)`, level1, level2)
+		_, _ = pool.Exec(ctx, `DELETE FROM programs WHERE id=$1`, program)
+		_, _ = pool.Exec(ctx, `DELETE FROM tenant_memberships WHERE tenant_id=$1`, tenant)
+		_, _ = pool.Exec(ctx, `DELETE FROM tenants WHERE id=$1`, tenant)
+		_, _ = pool.Exec(ctx, `DELETE FROM user_progress WHERE user_id IN ($1,$2)`, student1, student2)
+		_, _ = pool.Exec(ctx, `DELETE FROM profiles WHERE user_id IN ($1,$2)`, student1, student2)
+		_, _ = pool.Exec(ctx, `DELETE FROM users WHERE id IN ($1,$2)`, student1, student2)
 	}()
 
 	for i, id := range []string{student1, student2} {
@@ -54,13 +54,20 @@ func TestSelfServiceProgramProgressPostgres(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err = pool.Exec(ctx, `INSERT INTO programs(id,name,slug,description,difficulty,duration_weeks,published,status,category) VALUES($1,'E2E program','phase-19-e2e','test','beginner',2,true,'published','SKILL')`, program); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO tenants(id,slug,name,owner_user_id) VALUES($1,'program-e2e','Program E2E',$2)`, tenant, student1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = pool.Exec(ctx, `INSERT INTO tenant_memberships(tenant_id,user_id,role) VALUES($1,$2,'coach'),($1,$3,'student')`, tenant, student1, student2); err != nil {
+		t.Fatal(err)
+	}
+	ctx = middleware.WithTenant(ctx, tenant, "student")
+	if _, err = pool.Exec(ctx, `INSERT INTO programs(id,name,slug,description,difficulty,duration_weeks,published,status,category,tenant_id,owner_user_id) VALUES($1,'E2E program','phase-19-e2e','test','beginner',2,true,'published','SKILL',$2,$3)`, program, tenant, student1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = pool.Exec(ctx, `INSERT INTO program_levels(id,program_id,level_number,title,description,difficulty,unlock_rule_type,sort_order) VALUES($1,$3,1,'First','test','beginner','none',1),($2,$3,2,'Second','test','beginner','previous_level',2)`, level1, level2, program); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pool.Exec(ctx, `INSERT INTO workouts(id,program_id,program_level_id,day_number,title,description,estimated_minutes,sort_order,status) VALUES($1,$3,$4,1,'First workout','test',10,1,'published'),($2,$3,$5,2,'Second workout','test',10,2,'published')`, workout1, workout2, program, level1, level2); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO workouts(id,program_id,program_level_id,day_number,title,description,estimated_minutes,sort_order,status,tenant_id,owner_user_id) VALUES($1,$3,$4,1,'First workout','test',10,1,'published',$6,$7),($2,$3,$5,2,'Second workout','test',10,2,'published',$6,$7)`, workout1, workout2, program, level1, level2, tenant, student1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,7 +86,7 @@ func TestSelfServiceProgramProgressPostgres(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT count(*) FROM user_program_progress WHERE user_id=$1 AND program_id=$2`, student1, program).Scan(&rows); err != nil || rows != 1 {
 		t.Fatalf("start is not idempotent: rows=%d err=%v", rows, err)
 	}
-	if _, err = pool.Exec(ctx, `INSERT INTO workout_sessions(user_id,workout_id,status,completed_at) VALUES($1,$2,'completed',NOW())`, student1, workout1); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO workout_sessions(user_id,tenant_id,workout_id,status,completed_at) VALUES($1,$3,$2,'completed',NOW())`, student1, workout1, tenant); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := svc.Get(ctx, student1, program)
@@ -90,7 +97,7 @@ func TestSelfServiceProgramProgressPostgres(t *testing.T) {
 	if err != nil || other.CurrentLevel != 1 {
 		t.Fatalf("student isolation: %+v %v", other, err)
 	}
-	if _, err = pool.Exec(ctx, `INSERT INTO workout_sessions(user_id,workout_id,status,completed_at) VALUES($1,$2,'completed',NOW())`, student1, workout2); err != nil {
+	if _, err = pool.Exec(ctx, `INSERT INTO workout_sessions(user_id,tenant_id,workout_id,status,completed_at) VALUES($1,$3,$2,'completed',NOW())`, student1, workout2, tenant); err != nil {
 		t.Fatal(err)
 	}
 	detail, err = svc.Get(ctx, student1, program)

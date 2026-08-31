@@ -3,6 +3,7 @@ package skills
 import (
 	"context"
 	"errors"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -82,11 +83,25 @@ type Mastery struct {
 type Service struct{ pool *pgxpool.Pool }
 
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool} }
+func (s *Service) tenantSkill(ctx context.Context, id string) (string, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return "", ErrNotFound
+	}
+	var exists bool
+	if e := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM skills WHERE id=$1::uuid AND tenant_id=$2::uuid AND status='published')`, id, tenant).Scan(&exists); e != nil {
+		return "", e
+	}
+	if !exists {
+		return "", ErrNotFound
+	}
+	return tenant, nil
+}
 
 const listSQL = `SELECT s.id::text,s.code,s.name,s.description,s.category,s.map_group,s.difficulty,s.icon,s.xp_reward,s.final_criterion_type,s.final_criterion_value,COALESCE(m.url,''),
-CASE WHEN usp.status IS NOT NULL THEN usp.status WHEN EXISTS(SELECT 1 FROM skill_requirements r LEFT JOIN user_skill_progress required ON required.user_id=$1::uuid AND required.skill_id=r.required_skill_id WHERE r.skill_id=s.id AND (required.status IS DISTINCT FROM 'mastered' OR (r.requirement_type='skill_level' AND required.current_level<r.requirement_value))) THEN 'locked' ELSE 'available' END,
-COALESCE(usp.current_level,1),GREATEST(COUNT(sl.id),(SELECT count(*) FROM skill_criteria c WHERE c.skill_id=s.id))::int,GREATEST(COALESCE(COUNT(ul.skill_level_id) FILTER(WHERE ul.status='completed'),0),(SELECT count(*) FROM user_skill_criteria uc JOIN skill_criteria c ON c.id=uc.criterion_id WHERE c.skill_id=s.id AND uc.user_id=$1::uuid))::int
-FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid WHERE s.status='published' AND NOT s.hidden GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY CASE s.map_group WHEN 'basic' THEN 1 WHEN 'floor' THEN 2 WHEN 'bar' THEN 3 WHEN 'parallel_bars' THEN 4 ELSE 5 END,CASE WHEN s.sort_order=0 THEN 2147483647 ELSE s.sort_order END,s.name,s.id`
+CASE WHEN usp.status IS NOT NULL THEN usp.status WHEN EXISTS(SELECT 1 FROM skill_requirements r LEFT JOIN user_skill_progress required ON required.user_id=$1::uuid AND required.tenant_id=$2::uuid AND required.skill_id=r.required_skill_id WHERE r.skill_id=s.id AND (required.status IS DISTINCT FROM 'mastered' OR (r.requirement_type='skill_level' AND required.current_level<r.requirement_value))) THEN 'locked' ELSE 'available' END,
+COALESCE(usp.current_level,1),GREATEST(COUNT(sl.id),(SELECT count(*) FROM skill_criteria c WHERE c.skill_id=s.id))::int,GREATEST(COALESCE(COUNT(ul.skill_level_id) FILTER(WHERE ul.status='completed'),0),(SELECT count(*) FROM user_skill_criteria uc JOIN skill_criteria c ON c.id=uc.criterion_id WHERE c.skill_id=s.id AND uc.user_id=$1::uuid AND uc.tenant_id=$2::uuid))::int
+FROM skills s LEFT JOIN media_assets m ON m.id=s.cover_media_id LEFT JOIN user_skill_progress usp ON usp.skill_id=s.id AND usp.user_id=$1::uuid AND usp.tenant_id=$2::uuid LEFT JOIN skill_levels sl ON sl.skill_id=s.id LEFT JOIN user_skill_level_progress ul ON ul.skill_level_id=sl.id AND ul.user_id=$1::uuid AND ul.tenant_id=$2::uuid WHERE s.tenant_id=$2::uuid AND s.status='published' AND NOT s.hidden GROUP BY s.id,m.url,usp.status,usp.current_level ORDER BY CASE s.map_group WHEN 'basic' THEN 1 WHEN 'floor' THEN 2 WHEN 'bar' THEN 3 WHEN 'parallel_bars' THEN 4 ELSE 5 END,CASE WHEN s.sort_order=0 THEN 2147483647 ELSE s.sort_order END,s.name,s.id`
 
 func scanSkill(rows pgx.Rows) (Skill, error) {
 	var x Skill
@@ -101,7 +116,11 @@ func scanSkill(rows pgx.Rows) (Skill, error) {
 	return x, err
 }
 func (s *Service) List(ctx context.Context, user string) ([]Skill, error) {
-	rows, e := s.pool.Query(ctx, listSQL, user)
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return []Skill{}, nil
+	}
+	rows, e := s.pool.Query(ctx, listSQL, user, tenant)
 	if e != nil {
 		return nil, e
 	}
@@ -117,11 +136,15 @@ func (s *Service) List(ctx context.Context, user string) ([]Skill, error) {
 	return out, rows.Err()
 }
 func (s *Service) Map(ctx context.Context, user string) (Map, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Map{Nodes: []Skill{}, Requirements: []Requirement{}}, nil
+	}
 	nodes, e := s.List(ctx, user)
 	if e != nil {
 		return Map{}, e
 	}
-	rows, e := s.pool.Query(ctx, `SELECT r.skill_id::text,r.required_skill_id::text,r.requirement_type,r.requirement_value FROM skill_requirements r JOIN skills child ON child.id=r.skill_id JOIN skills parent ON parent.id=r.required_skill_id WHERE child.status='published' AND NOT child.hidden AND parent.status='published' AND NOT parent.hidden ORDER BY r.skill_id,r.required_skill_id`)
+	rows, e := s.pool.Query(ctx, `SELECT r.skill_id::text,r.required_skill_id::text,r.requirement_type,r.requirement_value FROM skill_requirements r JOIN skills child ON child.id=r.skill_id JOIN skills parent ON parent.id=r.required_skill_id WHERE child.tenant_id=$1::uuid AND parent.tenant_id=$1::uuid AND child.status='published' AND NOT child.hidden AND parent.status='published' AND NOT parent.hidden ORDER BY r.skill_id,r.required_skill_id`, tenant)
 	if e != nil {
 		return Map{}, e
 	}
@@ -203,6 +226,10 @@ func (s *Service) Get(ctx context.Context, user, id string) (Detail, error) {
 }
 
 func (s *Service) ConfirmCriterion(ctx context.Context, user, skillID, criterionID string) (Mastery, error) {
+	tenant, tenantErr := s.tenantSkill(ctx, skillID)
+	if tenantErr != nil {
+		return Mastery{}, tenantErr
+	}
 	tx, e := s.pool.Begin(ctx)
 	if e != nil {
 		return Mastery{}, e
@@ -210,14 +237,14 @@ func (s *Service) ConfirmCriterion(ctx context.Context, user, skillID, criterion
 	defer tx.Rollback(ctx)
 	var code string
 	var reward int32
-	e = tx.QueryRow(ctx, `SELECT s.code,s.xp_reward FROM skill_criteria c JOIN skills s ON s.id=c.skill_id WHERE c.id=$1::uuid AND c.skill_id=$2::uuid AND s.status='published'`, criterionID, skillID).Scan(&code, &reward)
+	e = tx.QueryRow(ctx, `SELECT s.code,s.xp_reward FROM skill_criteria c JOIN skills s ON s.id=c.skill_id WHERE c.id=$1::uuid AND c.skill_id=$2::uuid AND s.tenant_id=$3::uuid AND s.status='published'`, criterionID, skillID, tenant).Scan(&code, &reward)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return Mastery{}, ErrNotFound
 	}
 	if e != nil {
 		return Mastery{}, e
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO user_skill_criteria(user_id,criterion_id) VALUES($1::uuid,$2::uuid) ON CONFLICT DO NOTHING`, user, criterionID)
+	_, e = tx.Exec(ctx, `INSERT INTO user_skill_criteria(user_id,criterion_id,tenant_id) VALUES($1::uuid,$2::uuid,$3::uuid) ON CONFLICT DO NOTHING`, user, criterionID, tenant)
 	if e != nil {
 		return Mastery{}, e
 	}
@@ -233,7 +260,7 @@ func (s *Service) ConfirmCriterion(ctx context.Context, user, skillID, criterion
 		return Mastery{SkillID: skillID, Status: "in_progress"}, nil
 	}
 	var prior string
-	e = tx.QueryRow(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,current_level,status,started_at,completed_at) VALUES($1::uuid,$2::uuid,1,'mastered',NOW(),NOW()) ON CONFLICT(user_id,skill_id) DO UPDATE SET status='mastered',completed_at=COALESCE(user_skill_progress.completed_at,NOW()),updated_at=NOW() RETURNING status`, user, skillID).Scan(&prior)
+	e = tx.QueryRow(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,tenant_id,current_level,status,started_at,completed_at) VALUES($1::uuid,$2::uuid,$3::uuid,1,'mastered',NOW(),NOW()) ON CONFLICT(user_id,skill_id) DO UPDATE SET status='mastered',completed_at=COALESCE(user_skill_progress.completed_at,NOW()),updated_at=NOW(),tenant_id=EXCLUDED.tenant_id RETURNING status`, user, skillID, tenant).Scan(&prior)
 	if e != nil {
 		return Mastery{}, e
 	}
@@ -257,6 +284,10 @@ func (s *Service) ConfirmCriterion(ctx context.Context, user, skillID, criterion
 	return Mastery{SkillID: skillID, Status: "mastered", XPEarned: map[bool]int32{true: reward}[awarded], Achievement: map[bool]string{true: "CALISTHENICS_BASE_READY"}[awarded], AlreadyMastered: !awarded}, nil
 }
 func (s *Service) CompleteLevel(ctx context.Context, user, skillID string, levelNumber, value int32) error {
+	tenant, tenantErr := s.tenantSkill(ctx, skillID)
+	if tenantErr != nil {
+		return tenantErr
+	}
 	tx, e := s.pool.Begin(ctx)
 	if e != nil {
 		return e
@@ -288,17 +319,21 @@ func (s *Service) CompleteLevel(ctx context.Context, user, skillID string, level
 	if value < required {
 		return ErrCriterion
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO user_skill_level_progress(user_id,skill_level_id,status,progress_value,completed_at) VALUES($1::uuid,$2::uuid,'completed',$3,NOW()) ON CONFLICT(user_id,skill_level_id) DO UPDATE SET status='completed',progress_value=GREATEST(user_skill_level_progress.progress_value,EXCLUDED.progress_value),completed_at=COALESCE(user_skill_level_progress.completed_at,NOW()),updated_at=NOW()`, user, levelID, value)
+	_, e = tx.Exec(ctx, `INSERT INTO user_skill_level_progress(user_id,skill_level_id,tenant_id,status,progress_value,completed_at) VALUES($1::uuid,$2::uuid,$4::uuid,'completed',$3,NOW()) ON CONFLICT(user_id,skill_level_id) DO UPDATE SET status='completed',progress_value=GREATEST(user_skill_level_progress.progress_value,EXCLUDED.progress_value),completed_at=COALESCE(user_skill_level_progress.completed_at,NOW()),updated_at=NOW(),tenant_id=EXCLUDED.tenant_id`, user, levelID, value, tenant)
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,current_level,status,started_at) VALUES($1::uuid,$2::uuid,$3,'in_progress',NOW()) ON CONFLICT(user_id,skill_id) DO UPDATE SET current_level=GREATEST(user_skill_progress.current_level,$3),status=CASE WHEN user_skill_progress.status='mastered' THEN 'mastered' ELSE 'in_progress' END,updated_at=NOW()`, user, skillID, levelNumber+1)
+	_, e = tx.Exec(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,tenant_id,current_level,status,started_at) VALUES($1::uuid,$2::uuid,$4::uuid,$3,'in_progress',NOW()) ON CONFLICT(user_id,skill_id) DO UPDATE SET current_level=GREATEST(user_skill_progress.current_level,$3),status=CASE WHEN user_skill_progress.status='mastered' THEN 'mastered' ELSE 'in_progress' END,updated_at=NOW(),tenant_id=EXCLUDED.tenant_id`, user, skillID, levelNumber+1, tenant)
 	if e != nil {
 		return e
 	}
 	return tx.Commit(ctx)
 }
 func (s *Service) Master(ctx context.Context, user, skillID string, value int32) (Mastery, error) {
+	tenant, tenantErr := s.tenantSkill(ctx, skillID)
+	if tenantErr != nil {
+		return Mastery{}, tenantErr
+	}
 	tx, e := s.pool.Begin(ctx)
 	if e != nil {
 		return Mastery{}, e
@@ -306,7 +341,7 @@ func (s *Service) Master(ctx context.Context, user, skillID string, value int32)
 	defer tx.Rollback(ctx)
 	var code, criterion string
 	var required, reward, total, done int32
-	e = tx.QueryRow(ctx, `SELECT code,final_criterion_type,final_criterion_value,xp_reward,(SELECT COUNT(*)::int FROM skill_levels WHERE skill_id=s.id),(SELECT COUNT(*)::int FROM user_skill_level_progress up JOIN skill_levels sl ON sl.id=up.skill_level_id WHERE up.user_id=$1::uuid AND sl.skill_id=s.id AND up.status='completed') FROM skills s WHERE id=$2::uuid`, user, skillID).Scan(&code, &criterion, &required, &reward, &total, &done)
+	e = tx.QueryRow(ctx, `SELECT code,final_criterion_type,final_criterion_value,xp_reward,(SELECT COUNT(*)::int FROM skill_levels WHERE skill_id=s.id),(SELECT COUNT(*)::int FROM user_skill_level_progress up JOIN skill_levels sl ON sl.id=up.skill_level_id WHERE up.user_id=$1::uuid AND up.tenant_id=$3::uuid AND sl.skill_id=s.id AND up.status='completed') FROM skills s WHERE id=$2::uuid AND tenant_id=$3::uuid`, user, skillID, tenant).Scan(&code, &criterion, &required, &reward, &total, &done)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return Mastery{}, ErrNotFound
 	}
@@ -318,14 +353,14 @@ func (s *Service) Master(ctx context.Context, user, skillID string, value int32)
 		return Mastery{}, ErrCriterion
 	}
 	var status string
-	e = tx.QueryRow(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,current_level,status,started_at) VALUES($1::uuid,$2::uuid,$3,'in_progress',NOW()) ON CONFLICT(user_id,skill_id) DO UPDATE SET updated_at=NOW() RETURNING status`, user, skillID, total).Scan(&status)
+	e = tx.QueryRow(ctx, `INSERT INTO user_skill_progress(user_id,skill_id,tenant_id,current_level,status,started_at) VALUES($1::uuid,$2::uuid,$4::uuid,$3,'in_progress',NOW()) ON CONFLICT(user_id,skill_id) DO UPDATE SET updated_at=NOW(),tenant_id=EXCLUDED.tenant_id RETURNING status`, user, skillID, total, tenant).Scan(&status)
 	if e != nil {
 		return Mastery{}, e
 	}
 	if status == "mastered" {
 		return Mastery{SkillID: skillID, Status: status, AlreadyMastered: true}, tx.Commit(ctx)
 	}
-	_, e = tx.Exec(ctx, `UPDATE user_skill_progress SET status='mastered',current_level=$3,completed_at=NOW(),updated_at=NOW() WHERE user_id=$1::uuid AND skill_id=$2::uuid`, user, skillID, total)
+	_, e = tx.Exec(ctx, `UPDATE user_skill_progress SET status='mastered',current_level=$3,completed_at=NOW(),updated_at=NOW() WHERE user_id=$1::uuid AND skill_id=$2::uuid AND tenant_id=$4::uuid`, user, skillID, total, tenant)
 	if e != nil {
 		return Mastery{}, e
 	}

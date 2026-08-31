@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"sort"
 	"time"
 
@@ -114,6 +115,10 @@ func (s *Service) profileTZ(ctx context.Context, user string) (string, error) {
 	return z, e
 }
 func (s *Service) CreateSchedule(ctx context.Context, user string, in ScheduleInput) (Schedule, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Schedule{}, ErrNotFound
+	}
 	fallback, e := s.profileTZ(ctx, user)
 	if e != nil {
 		return Schedule{}, e
@@ -132,7 +137,7 @@ func (s *Service) CreateSchedule(ctx context.Context, user string, in ScheduleIn
 	if in.Active != nil {
 		active = *in.Active
 	}
-	e = tx.QueryRow(ctx, `INSERT INTO user_training_schedules(user_id,workout_id,preferred_time,timezone,active,start_date,end_date) SELECT $1::uuid,w.id,$3::time,$4,$5,$6::date,$7::date FROM workouts w WHERE w.id=$2::uuid AND w.status='published' RETURNING id::text,workout_id::text,to_char(preferred_time,'HH24:MI'),timezone,start_date::text,end_date::text,active`, user, in.WorkoutID, in.PreferredTime, tz, active, in.StartDate, in.EndDate).Scan(&out.ID, &out.WorkoutID, &out.PreferredTime, &out.Timezone, &out.StartDate, &out.EndDate, &out.Active)
+	e = tx.QueryRow(ctx, `INSERT INTO user_training_schedules(user_id,tenant_id,workout_id,preferred_time,timezone,active,start_date,end_date) SELECT $1::uuid,$8::uuid,w.id,$3::time,$4,$5,$6::date,$7::date FROM workouts w WHERE w.id=$2::uuid AND w.tenant_id=$8::uuid AND w.status='published' RETURNING id::text,workout_id::text,to_char(preferred_time,'HH24:MI'),timezone,start_date::text,end_date::text,active`, user, in.WorkoutID, in.PreferredTime, tz, active, in.StartDate, in.EndDate, tenant).Scan(&out.ID, &out.WorkoutID, &out.PreferredTime, &out.Timezone, &out.StartDate, &out.EndDate, &out.Active)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return out, ErrNotFound
 	}
@@ -152,7 +157,11 @@ func (s *Service) CreateSchedule(ctx context.Context, user string, in ScheduleIn
 	return out, nil
 }
 func (s *Service) ListSchedules(ctx context.Context, user string) ([]Schedule, error) {
-	rows, e := s.pool.Query(ctx, `SELECT s.id::text,s.workout_id::text,w.title,to_char(s.preferred_time,'HH24:MI'),s.timezone,s.start_date::text,s.end_date::text,s.active,COALESCE(array_agg(d.weekday ORDER BY d.weekday) FILTER(WHERE d.weekday IS NOT NULL),'{}') FROM user_training_schedules s JOIN workouts w ON w.id=s.workout_id LEFT JOIN user_training_schedule_days d ON d.schedule_id=s.id WHERE s.user_id=$1::uuid GROUP BY s.id,w.title ORDER BY s.active DESC,s.created_at`, user)
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return []Schedule{}, nil
+	}
+	rows, e := s.pool.Query(ctx, `SELECT s.id::text,s.workout_id::text,w.title,to_char(s.preferred_time,'HH24:MI'),s.timezone,s.start_date::text,s.end_date::text,s.active,COALESCE(array_agg(d.weekday ORDER BY d.weekday) FILTER(WHERE d.weekday IS NOT NULL),'{}') FROM user_training_schedules s JOIN workouts w ON w.id=s.workout_id LEFT JOIN user_training_schedule_days d ON d.schedule_id=s.id WHERE s.user_id=$1::uuid AND s.tenant_id=$2::uuid GROUP BY s.id,w.title ORDER BY s.active DESC,s.created_at`, user, tenant)
 	if e != nil {
 		return nil, e
 	}
@@ -168,6 +177,10 @@ func (s *Service) ListSchedules(ctx context.Context, user string) ([]Schedule, e
 	return out, rows.Err()
 }
 func (s *Service) UpdateSchedule(ctx context.Context, user, id string, in ScheduleInput) (Schedule, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Schedule{}, ErrNotFound
+	}
 	fallback, e := s.profileTZ(ctx, user)
 	if e != nil {
 		return Schedule{}, e
@@ -186,7 +199,7 @@ func (s *Service) UpdateSchedule(ctx context.Context, user, id string, in Schedu
 		active = *in.Active
 	}
 	var out Schedule
-	e = tx.QueryRow(ctx, `UPDATE user_training_schedules SET workout_id=$3::uuid,preferred_time=$4::time,timezone=$5,active=$6,start_date=$7::date,end_date=$8::date,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid RETURNING id::text,workout_id::text,to_char(preferred_time,'HH24:MI'),timezone,start_date::text,end_date::text,active`, id, user, in.WorkoutID, in.PreferredTime, tz, active, in.StartDate, in.EndDate).Scan(&out.ID, &out.WorkoutID, &out.PreferredTime, &out.Timezone, &out.StartDate, &out.EndDate, &out.Active)
+	e = tx.QueryRow(ctx, `UPDATE user_training_schedules s SET workout_id=$3::uuid,preferred_time=$4::time,timezone=$5,active=$6,start_date=$7::date,end_date=$8::date,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid AND tenant_id=$9::uuid AND EXISTS(SELECT 1 FROM workouts w WHERE w.id=$3::uuid AND w.tenant_id=$9::uuid AND w.status='published') RETURNING id::text,workout_id::text,to_char(preferred_time,'HH24:MI'),timezone,start_date::text,end_date::text,active`, id, user, in.WorkoutID, in.PreferredTime, tz, active, in.StartDate, in.EndDate, tenant).Scan(&out.ID, &out.WorkoutID, &out.PreferredTime, &out.Timezone, &out.StartDate, &out.EndDate, &out.Active)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return out, ErrNotFound
 	}
@@ -209,7 +222,11 @@ func (s *Service) UpdateSchedule(ctx context.Context, user, id string, in Schedu
 	return out, nil
 }
 func (s *Service) DeleteSchedule(ctx context.Context, user, id string) error {
-	tag, e := s.pool.Exec(ctx, `UPDATE user_training_schedules SET active=false,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid`, id, user)
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return ErrNotFound
+	}
+	tag, e := s.pool.Exec(ctx, `UPDATE user_training_schedules SET active=false,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid AND tenant_id=$3::uuid`, id, user, tenant)
 	if e != nil {
 		return e
 	}
@@ -231,6 +248,10 @@ func validatePlanned(in PlannedInput) error {
 	return nil
 }
 func (s *Service) CreatePlanned(ctx context.Context, user string, in PlannedInput) (PlannedWorkout, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return PlannedWorkout{}, ErrNotFound
+	}
 	if e := validatePlanned(in); e != nil {
 		return PlannedWorkout{}, e
 	}
@@ -239,25 +260,33 @@ func (s *Service) CreatePlanned(ctx context.Context, user string, in PlannedInpu
 		return PlannedWorkout{}, e
 	}
 	var x PlannedWorkout
-	e = s.pool.QueryRow(ctx, `INSERT INTO user_planned_workouts(user_id,workout_id,scheduled_date,scheduled_time,timezone,source_schedule_id) SELECT $1::uuid,w.id,$3::date,$4::time,$5,$6::uuid FROM workouts w WHERE w.id=$2::uuid AND ($6::uuid IS NULL OR EXISTS(SELECT 1 FROM user_training_schedules s WHERE s.id=$6::uuid AND s.user_id=$1::uuid AND s.workout_id=w.id)) ON CONFLICT (user_id,source_schedule_id,scheduled_date) WHERE source_schedule_id IS NOT NULL DO UPDATE SET scheduled_time=EXCLUDED.scheduled_time RETURNING id::text,workout_id::text,scheduled_date::text,to_char(scheduled_time,'HH24:MI'),timezone,source_schedule_id::text,status`, user, in.WorkoutID, in.ScheduledDate, in.ScheduledTime, tz, in.SourceScheduleID).Scan(&x.ID, &x.WorkoutID, &x.ScheduledDate, &x.ScheduledTime, &x.Timezone, &x.SourceScheduleID, &x.Status)
+	e = s.pool.QueryRow(ctx, `INSERT INTO user_planned_workouts(user_id,tenant_id,workout_id,scheduled_date,scheduled_time,timezone,source_schedule_id) SELECT $1::uuid,$7::uuid,w.id,$3::date,$4::time,$5,$6::uuid FROM workouts w WHERE w.id=$2::uuid AND w.tenant_id=$7::uuid AND ($6::uuid IS NULL OR EXISTS(SELECT 1 FROM user_training_schedules s WHERE s.id=$6::uuid AND s.user_id=$1::uuid AND s.tenant_id=$7::uuid AND s.workout_id=w.id)) ON CONFLICT (user_id,source_schedule_id,scheduled_date) WHERE source_schedule_id IS NOT NULL DO UPDATE SET scheduled_time=EXCLUDED.scheduled_time,tenant_id=EXCLUDED.tenant_id RETURNING id::text,workout_id::text,scheduled_date::text,to_char(scheduled_time,'HH24:MI'),timezone,source_schedule_id::text,status`, user, in.WorkoutID, in.ScheduledDate, in.ScheduledTime, tz, in.SourceScheduleID, tenant).Scan(&x.ID, &x.WorkoutID, &x.ScheduledDate, &x.ScheduledTime, &x.Timezone, &x.SourceScheduleID, &x.Status)
 	if e != nil {
 		return x, e
 	}
 	return s.GetPlanned(ctx, user, x.ID)
 }
 func (s *Service) GetPlanned(ctx context.Context, user, id string) (PlannedWorkout, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return PlannedWorkout{}, ErrNotFound
+	}
 	var x PlannedWorkout
-	e := s.pool.QueryRow(ctx, `SELECT p.id::text,p.workout_id::text,w.title,p.scheduled_date::text,to_char(p.scheduled_time,'HH24:MI'),p.timezone,p.source_schedule_id::text,p.status FROM user_planned_workouts p JOIN workouts w ON w.id=p.workout_id WHERE p.id=$1::uuid AND p.user_id=$2::uuid`, id, user).Scan(&x.ID, &x.WorkoutID, &x.WorkoutTitle, &x.ScheduledDate, &x.ScheduledTime, &x.Timezone, &x.SourceScheduleID, &x.Status)
+	e := s.pool.QueryRow(ctx, `SELECT p.id::text,p.workout_id::text,w.title,p.scheduled_date::text,to_char(p.scheduled_time,'HH24:MI'),p.timezone,p.source_schedule_id::text,p.status FROM user_planned_workouts p JOIN workouts w ON w.id=p.workout_id WHERE p.id=$1::uuid AND p.user_id=$2::uuid AND p.tenant_id=$3::uuid`, id, user, tenant).Scan(&x.ID, &x.WorkoutID, &x.WorkoutTitle, &x.ScheduledDate, &x.ScheduledTime, &x.Timezone, &x.SourceScheduleID, &x.Status)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return x, ErrNotFound
 	}
 	return x, e
 }
 func (s *Service) UpdatePlanned(ctx context.Context, user, id string, in PlannedInput) (PlannedWorkout, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return PlannedWorkout{}, ErrNotFound
+	}
 	if e := validatePlanned(in); e != nil {
 		return PlannedWorkout{}, e
 	}
-	tag, e := s.pool.Exec(ctx, `UPDATE user_planned_workouts SET workout_id=$3::uuid,scheduled_date=$4::date,scheduled_time=$5::time,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid AND status='scheduled'`, id, user, in.WorkoutID, in.ScheduledDate, in.ScheduledTime)
+	tag, e := s.pool.Exec(ctx, `UPDATE user_planned_workouts SET workout_id=$3::uuid,scheduled_date=$4::date,scheduled_time=$5::time,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid AND tenant_id=$6::uuid AND status='scheduled' AND EXISTS(SELECT 1 FROM workouts w WHERE w.id=$3::uuid AND w.tenant_id=$6::uuid AND w.status='published')`, id, user, in.WorkoutID, in.ScheduledDate, in.ScheduledTime, tenant)
 	if e != nil {
 		return PlannedWorkout{}, e
 	}
@@ -273,7 +302,11 @@ func (s *Service) SkipPlanned(ctx context.Context, user, id string) error {
 	return s.setStatus(ctx, user, id, "skipped")
 }
 func (s *Service) setStatus(ctx context.Context, user, id, status string) error {
-	tag, e := s.pool.Exec(ctx, `UPDATE user_planned_workouts SET status=$3,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid AND status='scheduled'`, id, user, status)
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return ErrNotFound
+	}
+	tag, e := s.pool.Exec(ctx, `UPDATE user_planned_workouts SET status=$3,updated_at=NOW() WHERE id=$1::uuid AND user_id=$2::uuid AND tenant_id=$4::uuid AND status='scheduled'`, id, user, status, tenant)
 	if e != nil {
 		return e
 	}
@@ -284,6 +317,10 @@ func (s *Service) setStatus(ctx context.Context, user, id, status string) error 
 }
 
 func (s *Service) Calendar(ctx context.Context, user, from, to string) ([]Occurrence, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return []Occurrence{}, nil
+	}
 	f, fe := time.Parse("2006-01-02", from)
 	t, te := time.Parse("2006-01-02", to)
 	if fe != nil || te != nil || t.Before(f) || t.Sub(f) > 366*24*time.Hour {
@@ -298,7 +335,7 @@ func (s *Service) Calendar(ctx context.Context, user, from, to string) ([]Occurr
 		return nil, e
 	}
 	today := time.Now().In(loc).Format("2006-01-02")
-	rows, e := s.pool.Query(ctx, `SELECT s.id::text,s.workout_id::text,w.title,to_char(s.preferred_time,'HH24:MI'),s.start_date::text,s.end_date::text,w.category,w.difficulty,w.estimated_minutes,array_agg(d.weekday) FROM user_training_schedules s JOIN user_training_schedule_days d ON d.schedule_id=s.id JOIN workouts w ON w.id=s.workout_id WHERE s.user_id=$1::uuid AND s.active AND s.start_date<=$3::date AND (s.end_date IS NULL OR s.end_date>=$2::date) GROUP BY s.id,w.id`, user, from, to)
+	rows, e := s.pool.Query(ctx, `SELECT s.id::text,s.workout_id::text,w.title,to_char(s.preferred_time,'HH24:MI'),s.start_date::text,s.end_date::text,w.category,w.difficulty,w.estimated_minutes,array_agg(d.weekday) FROM user_training_schedules s JOIN user_training_schedule_days d ON d.schedule_id=s.id JOIN workouts w ON w.id=s.workout_id WHERE s.user_id=$1::uuid AND s.tenant_id=$4::uuid AND s.active AND s.start_date<=$3::date AND (s.end_date IS NULL OR s.end_date>=$2::date) GROUP BY s.id,w.id`, user, from, to, tenant)
 	if e != nil {
 		return nil, e
 	}
@@ -331,7 +368,7 @@ func (s *Service) Calendar(ctx context.Context, user, from, to string) ([]Occurr
 			out = append(out, Occurrence{Date: ds, Time: tm, WorkoutID: wid, WorkoutTitle: title, ScheduleID: &id, Status: status, Category: cat, Difficulty: diff, EstimatedMinutes: mins})
 		}
 	}
-	prows, e := s.pool.Query(ctx, `SELECT pw.id::text,pw.workout_id::text,w.title,pw.scheduled_date::text,to_char(pw.scheduled_time,'HH24:MI'),pw.source_schedule_id::text,pw.status,w.category,w.difficulty,w.estimated_minutes,ws.id::text,ws.duration_seconds,ws.xp_earned,ws.completed_at FROM user_planned_workouts pw JOIN workouts w ON w.id=pw.workout_id LEFT JOIN workout_sessions ws ON ws.planned_workout_id=pw.id AND ws.status='completed' WHERE pw.user_id=$1::uuid AND pw.scheduled_date BETWEEN $2::date AND $3::date`, user, from, to)
+	prows, e := s.pool.Query(ctx, `SELECT pw.id::text,pw.workout_id::text,w.title,pw.scheduled_date::text,to_char(pw.scheduled_time,'HH24:MI'),pw.source_schedule_id::text,pw.status,w.category,w.difficulty,w.estimated_minutes,ws.id::text,ws.duration_seconds,ws.xp_earned,ws.completed_at FROM user_planned_workouts pw JOIN workouts w ON w.id=pw.workout_id LEFT JOIN workout_sessions ws ON ws.planned_workout_id=pw.id AND ws.tenant_id=$4::uuid AND ws.status='completed' WHERE pw.user_id=$1::uuid AND pw.tenant_id=$4::uuid AND pw.scheduled_date BETWEEN $2::date AND $3::date`, user, from, to, tenant)
 	if e != nil {
 		return nil, e
 	}

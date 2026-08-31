@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/auth"
@@ -25,6 +27,15 @@ type AuthDependencies struct {
 type telegramAuthRequest struct {
 	InitData string `json:"init_data"`
 }
+
+type tenantResolver interface {
+	ResolveTenant(context.Context, string, string) (*users.Tenant, error)
+}
+type tenantBootstrapper interface {
+	BootstrapTenant(context.Context, string, string) (*users.Tenant, error)
+}
+
+var tenantSlug = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func telegramAuthHandler(dependencies AuthDependencies) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
@@ -52,6 +63,20 @@ func telegramAuthHandler(dependencies AuthDependencies) http.HandlerFunc {
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "USER_PROVISIONING_FAILED", "Could not provision user")
 			return
+		}
+		values, _ := url.ParseQuery(payload.InitData)
+		startParam := values.Get("start_param") // covered by Telegram's validated signature
+		if startParam != "" && (!tenantSlug.MatchString(startParam) || len(startParam) > 63) {
+			writeError(writer, http.StatusBadRequest, "INVALID_TENANT_SLUG", "Coach space link is invalid")
+			return
+		}
+		if resolver, ok := dependencies.Users.(tenantBootstrapper); ok {
+			tenant, resolveErr := resolver.BootstrapTenant(request.Context(), user.ID, startParam)
+			if resolveErr != nil {
+				writeError(writer, http.StatusNotFound, "TENANT_NOT_FOUND", "Coach space is unavailable")
+				return
+			}
+			user.CurrentTenant = tenant
 		}
 		token, err := auth.IssueToken(user.ID, dependencies.JWTSecret, time.Now(), 24*time.Hour)
 		if err != nil {

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/access"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -67,7 +68,11 @@ func NewService(pool *pgxpool.Pool) *Service {
 }
 
 func (s *Service) List(ctx context.Context, user string) ([]Program, error) {
-	rows, err := s.pool.Query(ctx, `SELECT p.id::text,p.name,p.slug,p.description,p.difficulty,p.duration_weeks,p.category,COALESCE(m.url,''),(SELECT count(*)::int FROM workouts w WHERE w.program_id=p.id AND w.status='published'),COALESCE(upp.status,''),COALESCE(upp.current_level,0),COALESCE((SELECT title FROM program_levels WHERE program_id=p.id AND level_number=upp.current_level),'') FROM programs p LEFT JOIN media_assets m ON m.id=p.cover_media_id LEFT JOIN user_program_progress upp ON upp.program_id=p.id AND upp.user_id=$1::uuid WHERE p.published ORDER BY (upp.status='active') DESC,upp.updated_at DESC NULLS LAST,p.category,p.difficulty,p.name`, user)
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return []Program{}, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT p.id::text,p.name,p.slug,p.description,p.difficulty,p.duration_weeks,p.category,COALESCE(m.url,''),(SELECT count(*)::int FROM workouts w WHERE w.program_id=p.id AND w.tenant_id=$2::uuid AND w.status='published'),COALESCE(upp.status,''),COALESCE(upp.current_level,0),COALESCE((SELECT title FROM program_levels WHERE program_id=p.id AND level_number=upp.current_level),'') FROM programs p LEFT JOIN media_assets m ON m.id=p.cover_media_id LEFT JOIN user_program_progress upp ON upp.program_id=p.id AND upp.user_id=$1::uuid AND upp.tenant_id=$2::uuid WHERE p.tenant_id=$2::uuid AND p.published ORDER BY (upp.status='active') DESC,upp.updated_at DESC NULLS LAST,p.category,p.difficulty,p.name`, user, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -84,16 +89,20 @@ func (s *Service) List(ctx context.Context, user string) ([]Program, error) {
 }
 
 func (s *Service) Get(ctx context.Context, user, id string) (Program, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Program{}, ErrNotFound
+	}
 	_ = s.refresh(ctx, user, id)
 	var item Program
-	err := s.pool.QueryRow(ctx, `SELECT p.id::text,p.name,p.slug,p.description,p.difficulty,p.duration_weeks,p.category,COALESCE(m.url,''),(SELECT count(*)::int FROM workouts w WHERE w.program_id=p.id AND w.status='published'),COALESCE(upp.status,''),COALESCE(upp.current_level,0),COALESCE((SELECT title FROM program_levels WHERE program_id=p.id AND level_number=upp.current_level),'') FROM programs p LEFT JOIN media_assets m ON m.id=p.cover_media_id LEFT JOIN user_program_progress upp ON upp.program_id=p.id AND upp.user_id=$2::uuid WHERE p.id=$1::uuid AND p.published`, id, user).Scan(&item.ID, &item.Name, &item.Slug, &item.Description, &item.Difficulty, &item.DurationWeeks, &item.Category, &item.CoverMediaURL, &item.WorkoutCount, &item.ProgressStatus, &item.CurrentLevel, &item.CurrentStage)
+	err := s.pool.QueryRow(ctx, `SELECT p.id::text,p.name,p.slug,p.description,p.difficulty,p.duration_weeks,p.category,COALESCE(m.url,''),(SELECT count(*)::int FROM workouts w WHERE w.program_id=p.id AND w.tenant_id=$3::uuid AND w.status='published'),COALESCE(upp.status,''),COALESCE(upp.current_level,0),COALESCE((SELECT title FROM program_levels WHERE program_id=p.id AND level_number=upp.current_level),'') FROM programs p LEFT JOIN media_assets m ON m.id=p.cover_media_id LEFT JOIN user_program_progress upp ON upp.program_id=p.id AND upp.user_id=$2::uuid AND upp.tenant_id=$3::uuid WHERE p.id=$1::uuid AND p.tenant_id=$3::uuid AND p.published`, id, user, tenant).Scan(&item.ID, &item.Name, &item.Slug, &item.Description, &item.Difficulty, &item.DurationWeeks, &item.Category, &item.CoverMediaURL, &item.WorkoutCount, &item.ProgressStatus, &item.CurrentLevel, &item.CurrentStage)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Program{}, ErrNotFound
 	}
 	if err != nil {
 		return Program{}, err
 	}
-	rows, e := s.pool.Query(ctx, `SELECT pl.id::text,pl.level_number,pl.title,pl.description,pl.difficulty,pl.unlock_rule_type,pl.unlock_rule_value,w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,w.category FROM program_levels pl LEFT JOIN workouts w ON w.program_level_id=pl.id AND w.status='published' WHERE pl.program_id=$1::uuid ORDER BY pl.sort_order,pl.level_number,w.sort_order,w.day_number,w.id`, id)
+	rows, e := s.pool.Query(ctx, `SELECT pl.id::text,pl.level_number,pl.title,pl.description,pl.difficulty,pl.unlock_rule_type,pl.unlock_rule_value,w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,w.category FROM program_levels pl JOIN programs p ON p.id=pl.program_id LEFT JOIN workouts w ON w.program_level_id=pl.id AND w.tenant_id=$2::uuid AND w.status='published' WHERE pl.program_id=$1::uuid AND p.tenant_id=$2::uuid ORDER BY pl.sort_order,pl.level_number,w.sort_order,w.day_number,w.id`, id, tenant)
 	if e != nil {
 		return Program{}, e
 	}
@@ -140,9 +149,13 @@ func (s *Service) Get(ctx context.Context, user, id string) (Program, error) {
 }
 
 func (s *Service) Start(ctx context.Context, user, id string) (Progress, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Progress{}, ErrNotFound
+	}
 	var out Progress
 	var owner *string
-	if err := s.pool.QueryRow(ctx, `SELECT owner_user_id::text FROM programs WHERE id=$1::uuid AND published`, id).Scan(&owner); errors.Is(err, pgx.ErrNoRows) {
+	if err := s.pool.QueryRow(ctx, `SELECT owner_user_id::text FROM programs WHERE id=$1::uuid AND tenant_id=$2::uuid AND published`, id, tenant).Scan(&owner); errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrNotFound
 	} else if err != nil {
 		return out, err
@@ -154,7 +167,7 @@ func (s *Service) Start(ctx context.Context, user, id string) (Progress, error) 
 	if !allowed {
 		return out, ErrForbidden
 	}
-	err = s.pool.QueryRow(ctx, `INSERT INTO user_program_progress(user_id,program_id,current_level,status) SELECT $1::uuid,p.id,COALESCE((SELECT min(level_number) FROM program_levels WHERE program_id=p.id),1),'active' FROM programs p WHERE p.id=$2::uuid AND p.published ON CONFLICT(user_id,program_id) DO UPDATE SET updated_at=user_program_progress.updated_at RETURNING program_id::text,status,current_level,started_at::text,completed_at::text`, user, id).Scan(&out.ProgramID, &out.Status, &out.CurrentLevel, &out.StartedAt, &out.CompletedAt)
+	err = s.pool.QueryRow(ctx, `INSERT INTO user_program_progress(user_id,tenant_id,program_id,current_level,status) SELECT $1::uuid,$3::uuid,p.id,COALESCE((SELECT min(level_number) FROM program_levels WHERE program_id=p.id),1),'active' FROM programs p WHERE p.id=$2::uuid AND p.tenant_id=$3::uuid AND p.published ON CONFLICT(user_id,tenant_id,program_id) DO UPDATE SET updated_at=user_program_progress.updated_at RETURNING program_id::text,status,current_level,started_at::text,completed_at::text`, user, id, tenant).Scan(&out.ProgramID, &out.Status, &out.CurrentLevel, &out.StartedAt, &out.CompletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrNotFound
 	}
@@ -162,11 +175,15 @@ func (s *Service) Start(ctx context.Context, user, id string) (Progress, error) 
 }
 
 func (s *Service) refresh(ctx context.Context, user, program string) error {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return ErrNotFound
+	}
 	var active bool
-	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_program_progress WHERE user_id=$1::uuid AND program_id=$2::uuid AND status='active')`, user, program).Scan(&active); err != nil || !active {
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM user_program_progress WHERE user_id=$1::uuid AND program_id=$2::uuid AND tenant_id=$3::uuid AND status='active')`, user, program, tenant).Scan(&active); err != nil || !active {
 		return err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT pl.level_number,count(w.id)::int,count(DISTINCT ws.workout_id)::int FROM program_levels pl LEFT JOIN workouts w ON w.program_level_id=pl.id AND w.status='published' LEFT JOIN workout_sessions ws ON ws.workout_id=w.id AND ws.user_id=$1::uuid AND ws.status='completed' WHERE pl.program_id=$2::uuid GROUP BY pl.id ORDER BY pl.sort_order,pl.level_number`, user, program)
+	rows, err := s.pool.Query(ctx, `SELECT pl.level_number,count(w.id)::int,count(DISTINCT ws.workout_id)::int FROM program_levels pl LEFT JOIN workouts w ON w.program_level_id=pl.id AND w.tenant_id=$3::uuid AND w.status='published' LEFT JOIN workout_sessions ws ON ws.workout_id=w.id AND ws.user_id=$1::uuid AND ws.tenant_id=$3::uuid AND ws.status='completed' WHERE pl.program_id=$2::uuid GROUP BY pl.id ORDER BY pl.sort_order,pl.level_number`, user, program, tenant)
 	if err != nil {
 		return err
 	}
@@ -187,9 +204,9 @@ func (s *Service) refresh(ctx context.Context, user, program string) error {
 		return err
 	}
 	if allComplete {
-		_, err = s.pool.Exec(ctx, `UPDATE user_program_progress SET status='completed',completed_at=COALESCE(completed_at,NOW()) WHERE user_id=$1::uuid AND program_id=$2::uuid AND status='active'`, user, program)
+		_, err = s.pool.Exec(ctx, `UPDATE user_program_progress SET status='completed',completed_at=COALESCE(completed_at,NOW()) WHERE user_id=$1::uuid AND program_id=$2::uuid AND tenant_id=$3::uuid AND status='active'`, user, program, tenant)
 	} else {
-		_, err = s.pool.Exec(ctx, `UPDATE user_program_progress SET current_level=$3 WHERE user_id=$1::uuid AND program_id=$2::uuid AND status='active'`, user, program, current)
+		_, err = s.pool.Exec(ctx, `UPDATE user_program_progress SET current_level=$3 WHERE user_id=$1::uuid AND program_id=$2::uuid AND tenant_id=$4::uuid AND status='active'`, user, program, current, tenant)
 	}
 	return err
 }

@@ -42,6 +42,26 @@ func NewRouter(dependencies Dependencies) http.Handler {
 	router.Route("/api/v1", func(api chi.Router) {
 		api.Post("/auth/telegram", telegramAuthHandler(dependencies.Auth))
 		api.With(func(next http.Handler) http.Handler { return middleware.RequireAuth(dependencies.Auth.JWTSecret, next) }).Group(func(protected chi.Router) {
+			protected.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					userID, _ := middleware.UserID(r.Context())
+					if current, err := dependencies.Auth.Users.GetByID(r.Context(), userID); err == nil {
+						r = r.WithContext(middleware.WithPlatformRole(r.Context(), current.Role))
+					}
+					slug := r.Header.Get("X-Tenant-Slug")
+					if slug != "" {
+						if resolver, ok := dependencies.Auth.Users.(tenantResolver); ok {
+							tenant, err := resolver.ResolveTenant(r.Context(), userID, slug)
+							if err != nil || tenant == nil {
+								writeError(w, 403, "TENANT_FORBIDDEN", "Coach space is unavailable")
+								return
+							}
+							r = r.WithContext(middleware.WithTenant(r.Context(), tenant.ID, tenant.Role))
+						}
+					}
+					next.ServeHTTP(w, r)
+				})
+			})
 			protected.Get("/me", meHandler(dependencies.Auth))
 			protected.Get("/lessons", listLessons(dependencies.Lessons))
 			protected.Get("/lessons/{id}", getLesson(dependencies.Lessons))
@@ -53,6 +73,10 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			protected.Post("/programs/{id}/start", startProgram(dependencies.Programs))
 			protected.Get("/super-admin/users", superAdminUsers(dependencies.Auth.Users))
 			protected.Put("/super-admin/users/{id}/role", superAdminUserRole(dependencies.Auth.Users))
+			protected.Get("/super-admin/tenants",adminTenants(dependencies.Auth.Users))
+			protected.Get("/super-admin/tenants/{id}",adminTenant(dependencies.Auth.Users))
+			protected.Get("/coach/space",coachSpace(dependencies.Auth.Users))
+			protected.Put("/coach/space",coachSpace(dependencies.Auth.Users))
 			protected.Get("/workouts", listWorkouts(dependencies.Workouts))
 			protected.Get("/workouts/today", today(dependencies.Workouts))
 			protected.Get("/workouts/{id}", getWorkout(dependencies.Workouts))

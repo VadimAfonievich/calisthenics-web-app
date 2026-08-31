@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/calisthenics-coach/calisthenics-mini-app/backend/internal/middleware"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"time"
@@ -111,8 +112,12 @@ type Service struct{ pool *pgxpool.Pool }
 
 func NewService(p *pgxpool.Pool) *Service { return &Service{p} }
 func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Workout{}, ErrNotFound
+	}
 	var w Workout
-	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,w.warmup_workout_id::text,COALESCE(m.url,'') FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id WHERE w.id=$1::uuid AND w.status='published'`, id).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName, &w.Category, &w.WarmupEnabled, &w.WarmupWorkoutID, &w.CoverMediaURL)
+	e := s.pool.QueryRow(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,w.warmup_workout_id::text,COALESCE(m.url,'') FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id WHERE w.id=$1::uuid AND w.tenant_id=$2::uuid AND w.status='published'`, id, tenant).Scan(&w.ID, &w.Title, &w.Description, &w.Minutes, &w.Difficulty, &w.ProgramID, &w.ProgramName, &w.Category, &w.WarmupEnabled, &w.WarmupWorkoutID, &w.CoverMediaURL)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return w, ErrNotFound
 	}
@@ -121,7 +126,7 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	}
 	if w.WarmupEnabled && w.Category != "warmup" {
 		var warmup Warmup
-		e = s.pool.QueryRow(ctx, `SELECT id::text,title,estimated_minutes FROM workouts WHERE category='warmup' AND status='published' AND ($1::uuid IS NULL OR id=$1::uuid) ORDER BY is_default_warmup DESC,sort_order,id LIMIT 1`, w.WarmupWorkoutID).Scan(&warmup.ID, &warmup.Title, &warmup.Minutes)
+		e = s.pool.QueryRow(ctx, `SELECT id::text,title,estimated_minutes FROM workouts WHERE tenant_id=$2::uuid AND category='warmup' AND status='published' AND ($1::uuid IS NULL OR id=$1::uuid) ORDER BY is_default_warmup DESC,sort_order,id LIMIT 1`, w.WarmupWorkoutID, tenant).Scan(&warmup.ID, &warmup.Title, &warmup.Minutes)
 		if e == nil {
 			w.DefaultWarmup = &warmup
 		} else if !errors.Is(e, pgx.ErrNoRows) {
@@ -143,7 +148,11 @@ func (s *Service) workout(ctx context.Context, id string) (Workout, error) {
 	return w, rows.Err()
 }
 func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error) {
-	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COUNT(we.id)::int,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,COALESCE(m.url,''),active.status,active.id::text FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE w.status='published' GROUP BY w.id,p.id,m.id,active.status,active.id ORDER BY w.category,w.difficulty,p.name,w.sort_order,w.day_number NULLS LAST`, userID)
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return []CatalogItem{}, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.title,w.description,w.estimated_minutes,w.difficulty,COUNT(we.id)::int,COALESCE(p.id::text,''),COALESCE(p.name,''),w.category,w.warmup_enabled,COALESCE(m.url,''),active.status,active.id::text FROM workouts w LEFT JOIN programs p ON p.id=w.program_id LEFT JOIN media_assets m ON m.id=w.cover_media_id LEFT JOIN workout_exercises we ON we.workout_id=w.id LEFT JOIN LATERAL (SELECT ws.id,ws.status FROM workout_sessions ws WHERE ws.workout_id=w.id AND ws.user_id=$1::uuid AND ws.tenant_id=$2::uuid ORDER BY ws.started_at DESC LIMIT 1) active ON true WHERE w.tenant_id=$2::uuid AND w.status='published' GROUP BY w.id,p.id,m.id,active.status,active.id ORDER BY w.category,w.difficulty,p.name,w.sort_order,w.day_number NULLS LAST`, userID, tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -159,8 +168,12 @@ func (s *Service) List(ctx context.Context, userID string) ([]CatalogItem, error
 	return items, rows.Err()
 }
 func (s *Service) Today(ctx context.Context) (Workout, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Workout{}, ErrNotFound
+	}
 	var id string
-	e := s.pool.QueryRow(ctx, `SELECT w.id::text FROM workouts w WHERE w.status='published' AND w.category<>'warmup' ORDER BY w.difficulty,w.sort_order,w.day_number NULLS LAST LIMIT 1`).Scan(&id)
+	e := s.pool.QueryRow(ctx, `SELECT w.id::text FROM workouts w WHERE w.tenant_id=$1::uuid AND w.status='published' AND w.category<>'warmup' ORDER BY w.difficulty,w.sort_order,w.day_number NULLS LAST LIMIT 1`, tenant).Scan(&id)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return Workout{}, ErrNotFound
 	}
@@ -171,6 +184,10 @@ func (s *Service) Today(ctx context.Context) (Workout, error) {
 }
 func (s *Service) Get(ctx context.Context, id string) (Workout, error) { return s.workout(ctx, id) }
 func (s *Service) Start(ctx context.Context, u, w string, in StartInput) (Session, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Session{}, ErrForbidden
+	}
 	workout, e := s.workout(ctx, w)
 	if e != nil {
 		return Session{}, e
@@ -197,7 +214,7 @@ func (s *Service) Start(ctx context.Context, u, w string, in StartInput) (Sessio
 	}
 	if in.PlannedWorkoutID != nil {
 		var owner, plannedWorkout string
-		if e := s.pool.QueryRow(ctx, `SELECT user_id::text,workout_id::text FROM user_planned_workouts WHERE id=$1::uuid AND status='scheduled'`, *in.PlannedWorkoutID).Scan(&owner, &plannedWorkout); errors.Is(e, pgx.ErrNoRows) {
+		if e := s.pool.QueryRow(ctx, `SELECT user_id::text,workout_id::text FROM user_planned_workouts WHERE id=$1::uuid AND tenant_id=$2::uuid AND status='scheduled'`, *in.PlannedWorkoutID, tenant).Scan(&owner, &plannedWorkout); errors.Is(e, pgx.ErrNoRows) {
 			return Session{}, ErrNotFound
 		} else if e != nil {
 			return Session{}, e
@@ -213,17 +230,21 @@ func (s *Service) Start(ctx context.Context, u, w string, in StartInput) (Sessio
 	var x Session
 	e = s.pool.QueryRow(ctx, `WITH updated AS (
 UPDATE workout_sessions SET planned_workout_id=COALESCE(planned_workout_id,$3::uuid),session_purpose=$4,follow_up_workout_id=COALESCE(follow_up_workout_id,$5::uuid),follow_up_planned_workout_id=COALESCE(follow_up_planned_workout_id,$6::uuid),updated_at=NOW()
-WHERE id=(SELECT id FROM workout_sessions WHERE user_id=$1::uuid AND workout_id=$2::uuid AND status='started' AND (follow_up_workout_id IS NULL OR follow_up_workout_id=$5::uuid) ORDER BY started_at DESC LIMIT 1)
+WHERE id=(SELECT id FROM workout_sessions WHERE user_id=$1::uuid AND tenant_id=$7::uuid AND workout_id=$2::uuid AND status='started' AND (follow_up_workout_id IS NULL OR follow_up_workout_id=$5::uuid) ORDER BY started_at DESC LIMIT 1)
 RETURNING *), created AS (
-INSERT INTO workout_sessions(user_id,workout_id,planned_workout_id,session_purpose,follow_up_workout_id,follow_up_planned_workout_id)
-SELECT $1::uuid,$2::uuid,$3::uuid,$4,$5::uuid,$6::uuid WHERE NOT EXISTS(SELECT 1 FROM updated) RETURNING *)
+INSERT INTO workout_sessions(user_id,tenant_id,workout_id,planned_workout_id,session_purpose,follow_up_workout_id,follow_up_planned_workout_id)
+SELECT $1::uuid,$7::uuid,$2::uuid,$3::uuid,$4,$5::uuid,$6::uuid WHERE NOT EXISTS(SELECT 1 FROM updated) RETURNING *)
 SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text,session_purpose,follow_up_workout_id::text,follow_up_planned_workout_id::text,continued_session_id::text FROM updated
-UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text,session_purpose,follow_up_workout_id::text,follow_up_planned_workout_id::text,continued_session_id::text FROM created LIMIT 1`, u, w, plannedForSession, purpose, in.FollowUpWorkoutID, in.PlannedWorkoutID).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &x.StartedAt, &x.PlannedWorkoutID, &x.Purpose, &x.FollowUpWorkoutID, &x.FollowUpPlannedID, &x.ContinuedSessionID)
+UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text,session_purpose,follow_up_workout_id::text,follow_up_planned_workout_id::text,continued_session_id::text FROM created LIMIT 1`, u, w, plannedForSession, purpose, in.FollowUpWorkoutID, in.PlannedWorkoutID, tenant).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &x.StartedAt, &x.PlannedWorkoutID, &x.Purpose, &x.FollowUpWorkoutID, &x.FollowUpPlannedID, &x.ContinuedSessionID)
 	return x, e
 }
 func (s *Service) GetSession(ctx context.Context, userID, sessionID string) (ActiveSession, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return ActiveSession{}, ErrForbidden
+	}
 	var out ActiveSession
-	err := s.pool.QueryRow(ctx, `SELECT ws.id::text,ws.workout_id::text,ws.status,ws.duration_seconds,ws.xp_earned,ws.started_at,ws.planned_workout_id::text,ws.session_purpose,ws.follow_up_workout_id::text,COALESCE(next.title,''),ws.follow_up_planned_workout_id::text,ws.continued_session_id::text FROM workout_sessions ws LEFT JOIN workouts next ON next.id=ws.follow_up_workout_id WHERE ws.id=$1::uuid AND ws.user_id=$2::uuid`, sessionID, userID).Scan(&out.Session.ID, &out.Session.WorkoutID, &out.Session.Status, &out.Session.Duration, &out.Session.XP, &out.Session.StartedAt, &out.Session.PlannedWorkoutID, &out.Session.Purpose, &out.Session.FollowUpWorkoutID, &out.Session.FollowUpWorkoutTitle, &out.Session.FollowUpPlannedID, &out.Session.ContinuedSessionID)
+	err := s.pool.QueryRow(ctx, `SELECT ws.id::text,ws.workout_id::text,ws.status,ws.duration_seconds,ws.xp_earned,ws.started_at,ws.planned_workout_id::text,ws.session_purpose,ws.follow_up_workout_id::text,COALESCE(next.title,''),ws.follow_up_planned_workout_id::text,ws.continued_session_id::text FROM workout_sessions ws LEFT JOIN workouts next ON next.id=ws.follow_up_workout_id WHERE ws.id=$1::uuid AND ws.user_id=$2::uuid AND ws.tenant_id=$3::uuid`, sessionID, userID, tenant).Scan(&out.Session.ID, &out.Session.WorkoutID, &out.Session.Status, &out.Session.Duration, &out.Session.XP, &out.Session.StartedAt, &out.Session.PlannedWorkoutID, &out.Session.Purpose, &out.Session.FollowUpWorkoutID, &out.Session.FollowUpWorkoutTitle, &out.Session.FollowUpPlannedID, &out.Session.ContinuedSessionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, ErrForbidden
 	}
@@ -250,7 +271,11 @@ func (s *Service) GetSession(ctx context.Context, userID, sessionID string) (Act
 	return out, rows.Err()
 }
 func (s *Service) RecordSet(ctx context.Context, u, sid string, in SetInput) error {
-	tag, e := s.pool.Exec(ctx, `INSERT INTO exercise_sets(session_id,exercise_id,set_number,reps,duration_seconds,completed) SELECT $1::uuid,$2::uuid,$3,$4,$5,$6 FROM workout_sessions ws WHERE ws.id=$1::uuid AND ws.user_id=$7::uuid AND ws.status='started' ON CONFLICT(session_id,exercise_id,set_number) DO UPDATE SET reps=EXCLUDED.reps,duration_seconds=EXCLUDED.duration_seconds,completed=EXCLUDED.completed`, sid, in.ExerciseID, in.Number, in.Reps, in.Duration, in.Completed, u)
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return ErrForbidden
+	}
+	tag, e := s.pool.Exec(ctx, `INSERT INTO exercise_sets(session_id,exercise_id,set_number,reps,duration_seconds,completed) SELECT $1::uuid,$2::uuid,$3,$4,$5,$6 FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id JOIN exercises ex ON ex.id=$2::uuid WHERE ws.id=$1::uuid AND ws.user_id=$7::uuid AND ws.tenant_id=$8::uuid AND ws.status='started' AND (ex.tenant_id=$8::uuid OR (ex.tenant_id IS NULL AND ex.standard_key IS NOT NULL)) AND EXISTS(SELECT 1 FROM workout_exercises we WHERE we.workout_id=w.id AND we.exercise_id=ex.id) ON CONFLICT(session_id,exercise_id,set_number) DO UPDATE SET reps=EXCLUDED.reps,duration_seconds=EXCLUDED.duration_seconds,completed=EXCLUDED.completed`, sid, in.ExerciseID, in.Number, in.Reps, in.Duration, in.Completed, u, tenant)
 	if e != nil {
 		return e
 	}
@@ -260,6 +285,10 @@ func (s *Service) RecordSet(ctx context.Context, u, sid string, in SetInput) err
 	return nil
 }
 func ensureContinuation(ctx context.Context, tx pgx.Tx, user string, warmup *Session) error {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return ErrForbidden
+	}
 	if warmup.FollowUpWorkoutID == nil {
 		return nil
 	}
@@ -273,10 +302,10 @@ func ensureContinuation(ctx context.Context, tx pgx.Tx, user string, warmup *Ses
 		return nil
 	}
 	e := tx.QueryRow(ctx, `WITH existing AS (
-SELECT * FROM workout_sessions WHERE user_id=$1::uuid AND workout_id=$2::uuid AND status='started' ORDER BY started_at DESC LIMIT 1), created AS (
-INSERT INTO workout_sessions(user_id,workout_id,planned_workout_id,session_purpose) SELECT $1::uuid,$2::uuid,$3::uuid,'main' WHERE NOT EXISTS(SELECT 1 FROM existing) RETURNING *)
+SELECT * FROM workout_sessions WHERE user_id=$1::uuid AND tenant_id=$4::uuid AND workout_id=$2::uuid AND status='started' ORDER BY started_at DESC LIMIT 1), created AS (
+INSERT INTO workout_sessions(user_id,tenant_id,workout_id,planned_workout_id,session_purpose) SELECT $1::uuid,$4::uuid,$2::uuid,$3::uuid,'main' WHERE NOT EXISTS(SELECT 1 FROM existing) RETURNING *)
 SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text,session_purpose FROM existing
-UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text,session_purpose FROM created LIMIT 1`, user, *warmup.FollowUpWorkoutID, warmup.FollowUpPlannedID).Scan(&next.ID, &next.WorkoutID, &next.Status, &next.Duration, &next.XP, &next.StartedAt, &next.PlannedWorkoutID, &next.Purpose)
+UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,started_at,planned_workout_id::text,session_purpose FROM created LIMIT 1`, user, *warmup.FollowUpWorkoutID, warmup.FollowUpPlannedID, tenant).Scan(&next.ID, &next.WorkoutID, &next.Status, &next.Duration, &next.XP, &next.StartedAt, &next.PlannedWorkoutID, &next.Purpose)
 	if e != nil {
 		return e
 	}
@@ -289,6 +318,10 @@ UNION ALL SELECT id::text,workout_id::text,status,duration_seconds,xp_earned,sta
 	return nil
 }
 func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (Session, error) {
+	tenant, ok := middleware.TenantID(ctx)
+	if !ok {
+		return Session{}, ErrForbidden
+	}
 	tx, e := s.pool.Begin(ctx)
 	if e != nil {
 		return Session{}, e
@@ -296,7 +329,7 @@ func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (
 	defer tx.Rollback(ctx)
 	var x Session
 	var category string
-	e = tx.QueryRow(ctx, `SELECT ws.id::text,ws.workout_id::text,ws.status,ws.duration_seconds,ws.xp_earned,w.category,ws.planned_workout_id::text,ws.session_purpose,ws.follow_up_workout_id::text,COALESCE(next.title,''),ws.follow_up_planned_workout_id::text,ws.continued_session_id::text FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id LEFT JOIN workouts next ON next.id=ws.follow_up_workout_id WHERE ws.id=$1::uuid AND ws.user_id=$2::uuid FOR UPDATE OF ws`, sid, u).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &category, &x.PlannedWorkoutID, &x.Purpose, &x.FollowUpWorkoutID, &x.FollowUpWorkoutTitle, &x.FollowUpPlannedID, &x.ContinuedSessionID)
+	e = tx.QueryRow(ctx, `SELECT ws.id::text,ws.workout_id::text,ws.status,ws.duration_seconds,ws.xp_earned,w.category,ws.planned_workout_id::text,ws.session_purpose,ws.follow_up_workout_id::text,COALESCE(next.title,''),ws.follow_up_planned_workout_id::text,ws.continued_session_id::text FROM workout_sessions ws JOIN workouts w ON w.id=ws.workout_id LEFT JOIN workouts next ON next.id=ws.follow_up_workout_id WHERE ws.id=$1::uuid AND ws.user_id=$2::uuid AND ws.tenant_id=$3::uuid FOR UPDATE OF ws`, sid, u, tenant).Scan(&x.ID, &x.WorkoutID, &x.Status, &x.Duration, &x.XP, &category, &x.PlannedWorkoutID, &x.Purpose, &x.FollowUpWorkoutID, &x.FollowUpWorkoutTitle, &x.FollowUpPlannedID, &x.ContinuedSessionID)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return x, ErrForbidden
 	}
@@ -340,7 +373,7 @@ func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (
 	if e != nil {
 		return x, e
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO user_exercise_stats(user_id,exercise_id,total_sets,total_reps,max_reps,total_duration_seconds,max_duration_seconds,last_performed_at) SELECT $2::uuid,exercise_id,COUNT(*)::int,COALESCE(SUM(reps),0)::int,COALESCE(MAX(reps),0)::int,COALESCE(SUM(duration_seconds),0)::bigint,COALESCE(MAX(duration_seconds),0)::int,NOW() FROM exercise_sets WHERE session_id=$1::uuid AND completed GROUP BY exercise_id ON CONFLICT(user_id,exercise_id) DO UPDATE SET total_sets=user_exercise_stats.total_sets+EXCLUDED.total_sets,total_reps=user_exercise_stats.total_reps+EXCLUDED.total_reps,max_reps=GREATEST(user_exercise_stats.max_reps,EXCLUDED.max_reps),total_duration_seconds=user_exercise_stats.total_duration_seconds+EXCLUDED.total_duration_seconds,max_duration_seconds=GREATEST(user_exercise_stats.max_duration_seconds,EXCLUDED.max_duration_seconds),last_performed_at=NOW()`, sid, u)
+	_, e = tx.Exec(ctx, `INSERT INTO user_exercise_stats(user_id,tenant_id,exercise_id,total_sets,total_reps,max_reps,total_duration_seconds,max_duration_seconds,last_performed_at) SELECT $2::uuid,$3::uuid,exercise_id,COUNT(*)::int,COALESCE(SUM(reps),0)::int,COALESCE(MAX(reps),0)::int,COALESCE(SUM(duration_seconds),0)::bigint,COALESCE(MAX(duration_seconds),0)::int,NOW() FROM exercise_sets WHERE session_id=$1::uuid AND completed GROUP BY exercise_id ON CONFLICT(user_id,tenant_id,exercise_id) DO UPDATE SET total_sets=user_exercise_stats.total_sets+EXCLUDED.total_sets,total_reps=user_exercise_stats.total_reps+EXCLUDED.total_reps,max_reps=GREATEST(user_exercise_stats.max_reps,EXCLUDED.max_reps),total_duration_seconds=user_exercise_stats.total_duration_seconds+EXCLUDED.total_duration_seconds,max_duration_seconds=GREATEST(user_exercise_stats.max_duration_seconds,EXCLUDED.max_duration_seconds),last_performed_at=NOW()`, sid, u, tenant)
 	if e != nil {
 		return x, e
 	}
@@ -364,7 +397,7 @@ func (s *Service) Complete(ctx context.Context, u, sid string, duration int32) (
 	if e != nil {
 		return x, fmt.Errorf("update progress: %w", e)
 	}
-	rows, err := tx.Query(ctx, `WITH metrics AS (SELECT up.total_workouts,p.current_streak FROM user_progress up JOIN profiles p ON p.user_id=up.user_id WHERE up.user_id=$1::uuid), eligible AS (SELECT a.id,a.code,a.xp_reward FROM achievements a,metrics m WHERE (a.condition_type='workouts_completed' AND m.total_workouts>=a.condition_value) OR (a.condition_type='streak_days' AND $2>=a.condition_value) OR (a.code='FIRST_PULL_UP' AND EXISTS(SELECT 1 FROM user_exercise_stats s JOIN exercises e ON e.id=s.exercise_id WHERE s.user_id=$1::uuid AND e.slug='podtyagivaniya' AND s.total_sets>0)) OR (a.code='TEN_PUSH_UPS' AND EXISTS(SELECT 1 FROM user_exercise_stats s JOIN exercises e ON e.id=s.exercise_id WHERE s.user_id=$1::uuid AND e.slug='otzhimaniya' AND s.max_reps>=a.condition_value))) INSERT INTO user_achievements(user_id,achievement_id) SELECT $1::uuid,id FROM eligible ON CONFLICT DO NOTHING RETURNING (SELECT code FROM achievements WHERE id=achievement_id),(SELECT xp_reward FROM achievements WHERE id=achievement_id)`, u, x.CurrentStreak)
+	rows, err := tx.Query(ctx, `WITH metrics AS (SELECT up.total_workouts,p.current_streak FROM user_progress up JOIN profiles p ON p.user_id=up.user_id WHERE up.user_id=$1::uuid), eligible AS (SELECT a.id,a.code,a.xp_reward FROM achievements a,metrics m WHERE (a.condition_type='workouts_completed' AND m.total_workouts>=a.condition_value) OR (a.condition_type='streak_days' AND $2>=a.condition_value) OR (a.code='FIRST_PULL_UP' AND EXISTS(SELECT 1 FROM user_exercise_stats s JOIN exercises e ON e.id=s.exercise_id WHERE s.user_id=$1::uuid AND s.tenant_id=$3::uuid AND e.slug='podtyagivaniya' AND s.total_sets>0)) OR (a.code='TEN_PUSH_UPS' AND EXISTS(SELECT 1 FROM user_exercise_stats s JOIN exercises e ON e.id=s.exercise_id WHERE s.user_id=$1::uuid AND s.tenant_id=$3::uuid AND e.slug='otzhimaniya' AND s.max_reps>=a.condition_value))) INSERT INTO user_achievements(user_id,achievement_id) SELECT $1::uuid,id FROM eligible ON CONFLICT DO NOTHING RETURNING (SELECT code FROM achievements WHERE id=achievement_id),(SELECT xp_reward FROM achievements WHERE id=achievement_id)`, u, x.CurrentStreak, tenant)
 	if err != nil {
 		return x, err
 	}
